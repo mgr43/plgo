@@ -12,7 +12,7 @@ plgo is a **code generator and runtime library** for writing PostgreSQL extensio
 The CLI (`cmd/plgo/plgo.go` → `main()`) runs this pipeline:
 
 1. **Parse** user's Go package with `go/ast` — `modulewriter.go:NewModuleWriter()` invokes `FuncVisitor` (`visitors.go`) to collect all **exported functions** as `CodeWriter` objects.
-2. **Classify** each function into `VoidFunction`, `Function`, or `TriggerFunction` (`functions.go:NewCode()`). Classification depends on params/return types: trigger functions must accept `*plgo.TriggerData` and return `*plgo.TriggerRow`.
+2. **Classify** each function into `VoidFunction`, `Function`, `TriggerFunction`, or `SetOfFunction` (`functions.go:NewCode()`). Classification depends on params/return types: trigger functions must accept `*plgo.TriggerData` and return `*plgo.TriggerRow`; set-returning functions return `plgo.SetOf[T]`.
 3. **Generate** three files into a temp directory:
    - `package.go` — user's code with `plgo` imports removed (via `Remover` AST visitor) and exported functions renamed to `__FuncName`
    - `pl.go` — copy of root `pl.go` with package changed to `main`, include paths adjusted via `pg_config`, and `PG_FUNCTION_INFO_V1` macros injected at the `//{funcdec}` placeholder
@@ -30,8 +30,8 @@ The CLI (`cmd/plgo/plgo.go` → `main()`) runs this pipeline:
 | `cmd/plgo/functions.go` | `CodeWriter` types — generate wrapper Go code and SQL `CREATE FUNCTION` statements. Contains `datumTypes` map (Go→PG type mapping) |
 | `cmd/plgo/visitors.go` | AST visitors: `FuncVisitor` (collects exported funcs), `Remover` (strips `plgo` imports/selectors) |
 | `cmd/plgo/pathnames.go` / `pathnames_windows.go` | Platform-specific path handling and `pg_config` integration |
-| `cmd/plgo/plgo_test.go` | Comprehensive unit tests (129 test cases) — AST parsing, code generation, SQL output, and type coverage |
-| `example/example_methods.go` | Reference for valid user code patterns (void, scalar, array, bytea, trigger, nullable returns) |
+| `cmd/plgo/plgo_test.go` | Comprehensive unit tests (160 test cases) — AST parsing, code generation, SQL output, type coverage, SETOF |
+| `example/example_methods.go` | Reference for valid user code patterns (void, scalar, array, bytea, trigger, nullable returns, SETOF) |
 | `test/plgotest.go` | Integration test functions that run inside PostgreSQL (SPI, type conversions) |
 | `test/sql/` | SQL test scripts executed during integration tests |
 | `test/expected/` | Expected output for integration tests (diff-based verification) |
@@ -41,7 +41,7 @@ The CLI (`cmd/plgo/plgo.go` → `main()`) runs this pipeline:
 
 ## Supported Go↔PostgreSQL Type Mappings
 
-Defined in `cmd/plgo/functions.go:datumTypes`. Supported Go types: `string`, `[]byte`, `int16`–`int64`, `float32/64`, `bool`, `time.Time`, and their array variants. Only single return values are allowed (no multiple returns). Pointer return types (`*string`, `*int64`, etc.) enable SQL NULL returns.
+Defined in `cmd/plgo/functions.go:datumTypes`. Supported Go types: `string`, `[]byte`, `int16`–`int64`, `float32/64`, `bool`, `time.Time`, and their array variants. Only single return values are allowed (no multiple returns). Pointer return types (`*string`, `*int64`, etc.) enable SQL NULL returns. `plgo.SetOf[T]` enables `RETURNS SETOF <type>` for set-returning functions.
 
 ## Build & Test Workflow
 
@@ -52,7 +52,7 @@ make install    # or: cd cmd/plgo && go install .
 # Build an extension from a Go package
 plgo [path/to/package]    # generates build/ directory
 
-# Run unit tests (no database needed) — 129 test cases
+# Run unit tests (no database needed) — 160 test cases
 make test-unit
 
 # Run full integration tests (requires Docker)

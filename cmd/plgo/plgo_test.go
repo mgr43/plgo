@@ -394,13 +394,13 @@ func TestNewModuleWriter_Example(t *testing.T) {
 	if mw.PackageName != "example" {
 		t.Errorf("PackageName = %q, want example", mw.PackageName)
 	}
-	// Should find: Meh, ConcatAll, CreatedTimeTrigger, ConcatArray, GzipCompress, DoubleInt, ScaleArray, MaybeUpper
-	if len(mw.functions) != 8 {
+	// Should find: Meh, ConcatAll, CreatedTimeTrigger, ConcatArray, GzipCompress, DoubleInt, ScaleArray, MaybeUpper, GenerateSeries, RepeatString
+	if len(mw.functions) != 10 {
 		names := make([]string, len(mw.functions))
 		for i, f := range mw.functions {
 			names[i] = f.FuncDec()
 		}
-		t.Errorf("expected 8 functions, got %d: %v", len(mw.functions), names)
+		t.Errorf("expected 10 functions, got %d: %v", len(mw.functions), names)
 	}
 
 	// Verify function types
@@ -414,6 +414,8 @@ func TestNewModuleWriter_Example(t *testing.T) {
 			typeMap[v.Name] = "func:" + v.ReturnType
 		case *TriggerFunction:
 			typeMap[v.Name] = "trigger"
+		case *SetOfFunction:
+			typeMap[v.Name] = "setof:" + v.ElementType
 		}
 	}
 	if typeMap["Meh"] != "void" {
@@ -439,6 +441,12 @@ func TestNewModuleWriter_Example(t *testing.T) {
 	}
 	if typeMap["MaybeUpper"] != "func:string" {
 		t.Errorf("MaybeUpper type = %q, want func:string", typeMap["MaybeUpper"])
+	}
+	if typeMap["GenerateSeries"] != "setof:int32" {
+		t.Errorf("GenerateSeries type = %q, want setof:int32", typeMap["GenerateSeries"])
+	}
+	if typeMap["RepeatString"] != "setof:string" {
+		t.Errorf("RepeatString type = %q, want setof:string", typeMap["RepeatString"])
 	}
 }
 
@@ -926,3 +934,267 @@ func Foo(td *plgo.TriggerData) {}
 		return true
 	})
 }
+
+// --- SetOfFunction tests ---
+
+func TestNewCode_SetOfFunction(t *testing.T) {
+	fd := parseFuncDecl(t, `package main
+import "gitlab.com/microo8/plgo"
+func GenStrings() plgo.SetOf[string] { return nil }`)
+	code, err := NewCode(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf, ok := code.(*SetOfFunction)
+	if !ok {
+		t.Fatalf("expected *SetOfFunction, got %T", code)
+	}
+	if sf.Name != "GenStrings" {
+		t.Errorf("name = %q, want GenStrings", sf.Name)
+	}
+	if sf.ElementType != "string" {
+		t.Errorf("element type = %q, want string", sf.ElementType)
+	}
+	if len(sf.Params) != 0 {
+		t.Errorf("params = %v, want empty", sf.Params)
+	}
+}
+
+func TestNewCode_SetOfWithParams(t *testing.T) {
+	fd := parseFuncDecl(t, `package main
+import "gitlab.com/microo8/plgo"
+func GenN(n int32) plgo.SetOf[int64] { return nil }`)
+	code, err := NewCode(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf, ok := code.(*SetOfFunction)
+	if !ok {
+		t.Fatalf("expected *SetOfFunction, got %T", code)
+	}
+	if sf.ElementType != "int64" {
+		t.Errorf("element type = %q, want int64", sf.ElementType)
+	}
+	if len(sf.Params) != 1 || sf.Params[0].Type != "int32" {
+		t.Errorf("params = %+v, want [{n int32}]", sf.Params)
+	}
+}
+
+func TestNewCode_SetOfAllScalarTypes(t *testing.T) {
+	types := []string{
+		"string", "int16", "uint16", "int32", "uint32",
+		"int64", "int", "uint", "float32", "float64", "bool",
+	}
+	for _, goType := range types {
+		t.Run(goType, func(t *testing.T) {
+			fd := parseFuncDecl(t, `package main
+import "gitlab.com/microo8/plgo"
+func Fn() plgo.SetOf[`+goType+`] { return nil }`)
+			code, err := NewCode(fd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sf, ok := code.(*SetOfFunction)
+			if !ok {
+				t.Fatalf("expected *SetOfFunction, got %T", code)
+			}
+			if sf.ElementType != goType {
+				t.Errorf("element type = %q, want %q", sf.ElementType, goType)
+			}
+		})
+	}
+}
+
+func TestNewCode_SetOfBytea(t *testing.T) {
+	fd := parseFuncDecl(t, `package main
+import "gitlab.com/microo8/plgo"
+func Fn() plgo.SetOf[[]byte] { return nil }`)
+	code, err := NewCode(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sf, ok := code.(*SetOfFunction)
+	if !ok {
+		t.Fatalf("expected *SetOfFunction, got %T", code)
+	}
+	if sf.ElementType != "[]byte" {
+		t.Errorf("element type = %q, want []byte", sf.ElementType)
+	}
+}
+
+func TestNewCode_SetOfUnsupportedType(t *testing.T) {
+	fd := parseFuncDecl(t, `package main
+import "gitlab.com/microo8/plgo"
+type Custom struct{}
+func Fn() plgo.SetOf[Custom] { return nil }`)
+	_, err := NewCode(fd)
+	if err == nil {
+		t.Fatal("expected error for unsupported SetOf element type")
+	}
+	if !strings.Contains(err.Error(), "not supported") {
+		t.Errorf("error = %q, want 'not supported'", err.Error())
+	}
+}
+
+func TestSetOfFunction_SQL(t *testing.T) {
+	tests := []struct {
+		elemType string
+		pgSetOf  string
+	}{
+		{"string", "SETOF text"},
+		{"int16", "SETOF smallint"},
+		{"int32", "SETOF integer"},
+		{"int64", "SETOF bigint"},
+		{"float32", "SETOF real"},
+		{"float64", "SETOF double precision"},
+		{"bool", "SETOF boolean"},
+		{"[]byte", "SETOF bytea"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.elemType, func(t *testing.T) {
+			f := &SetOfFunction{
+				VoidFunction: VoidFunction{Name: "Fn"},
+				ElementType:  tt.elemType,
+			}
+			var buf bytes.Buffer
+			f.SQL("ext", &buf)
+			sql := buf.String()
+			if !strings.Contains(sql, "RETURNS "+tt.pgSetOf) {
+				t.Errorf("expected 'RETURNS %s', got:\n%s", tt.pgSetOf, sql)
+			}
+		})
+	}
+}
+
+func TestSetOfFunction_SQL_WithParams(t *testing.T) {
+	f := &SetOfFunction{
+		VoidFunction: VoidFunction{
+			Name:   "GenN",
+			Params: []Param{{Name: "n", Type: "int32"}},
+		},
+		ElementType: "int64",
+	}
+	var buf bytes.Buffer
+	f.SQL("ext", &buf)
+	sql := buf.String()
+	if !strings.Contains(sql, "n integer") {
+		t.Errorf("missing param, got:\n%s", sql)
+	}
+	if !strings.Contains(sql, "RETURNS SETOF bigint") {
+		t.Errorf("missing RETURNS SETOF bigint, got:\n%s", sql)
+	}
+	if !strings.Contains(sql, "'$libdir/ext', 'GenN'") {
+		t.Errorf("missing libdir ref, got:\n%s", sql)
+	}
+}
+
+func TestSetOfFunction_SQL_Comment(t *testing.T) {
+	f := &SetOfFunction{
+		VoidFunction: VoidFunction{Name: "Fn", Doc: "Generates stuff"},
+		ElementType:  "string",
+	}
+	var buf bytes.Buffer
+	f.SQL("ext", &buf)
+	sql := buf.String()
+	if !strings.Contains(sql, "COMMENT ON FUNCTION") {
+		t.Errorf("missing COMMENT, got:\n%s", sql)
+	}
+	if !strings.Contains(sql, "Generates stuff") {
+		t.Errorf("missing doc string, got:\n%s", sql)
+	}
+}
+
+func TestSetOfFunction_Code(t *testing.T) {
+	f := &SetOfFunction{
+		VoidFunction: VoidFunction{
+			Name:   "GenNames",
+			Params: []Param{{Name: "n", Type: "int32"}},
+		},
+		ElementType: "string",
+	}
+	var buf bytes.Buffer
+	f.Code(&buf)
+	code := buf.String()
+	if !strings.Contains(code, "//export GenNames") {
+		t.Errorf("missing //export, got:\n%s", code)
+	}
+	if !strings.Contains(code, "srfIsFirstCall(fcinfo)") {
+		t.Errorf("missing srfIsFirstCall, got:\n%s", code)
+	}
+	if !strings.Contains(code, "var n int32") {
+		t.Errorf("missing param declaration, got:\n%s", code)
+	}
+	if !strings.Contains(code, "fcinfo.Scan(") {
+		t.Errorf("missing fcinfo.Scan, got:\n%s", code)
+	}
+	if !strings.Contains(code, "result := __GenNames(") {
+		t.Errorf("missing __GenNames call, got:\n%s", code)
+	}
+	if !strings.Contains(code, "srfInit(fcinfo, vals)") {
+		t.Errorf("missing srfInit, got:\n%s", code)
+	}
+	if !strings.Contains(code, "return srfNext(fcinfo)") {
+		t.Errorf("missing srfNext return, got:\n%s", code)
+	}
+	if !strings.Contains(code, "elog_error") {
+		t.Errorf("missing elog_error handler, got:\n%s", code)
+	}
+}
+
+func TestSetOfFunction_Code_NoParams(t *testing.T) {
+	f := &SetOfFunction{
+		VoidFunction: VoidFunction{Name: "AllNames"},
+		ElementType:  "string",
+	}
+	var buf bytes.Buffer
+	f.Code(&buf)
+	code := buf.String()
+	if strings.Contains(code, "fcinfo.Scan") {
+		t.Errorf("should not call fcinfo.Scan when no params, got:\n%s", code)
+	}
+	if !strings.Contains(code, "result := __AllNames(") {
+		t.Errorf("missing __AllNames call, got:\n%s", code)
+	}
+	if !strings.Contains(code, "srfIsFirstCall(fcinfo)") {
+		t.Errorf("missing srfIsFirstCall")
+	}
+}
+
+func TestSetOfFunction_FuncDec(t *testing.T) {
+	f := &SetOfFunction{
+		VoidFunction: VoidFunction{Name: "GenSeries"},
+		ElementType:  "int32",
+	}
+	dec := f.FuncDec()
+	if dec != "PG_FUNCTION_INFO_V1(GenSeries);" {
+		t.Errorf("FuncDec() = %q", dec)
+	}
+}
+
+func TestRemover_StripsSetOfExpr(t *testing.T) {
+	fset := token.NewFileSet()
+	src := `package main
+
+import "gitlab.com/microo8/plgo"
+
+func Foo() plgo.SetOf[string] { return nil }
+`
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ast.Walk(new(Remover), file)
+
+	// After removal, plgo.SetOf[string] should become SetOf[string]
+	ast.Inspect(file, func(n ast.Node) bool {
+		if idx, ok := n.(*ast.IndexExpr); ok {
+			if sel, ok := idx.X.(*ast.SelectorExpr); ok {
+				if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "plgo" {
+					t.Error("Remover did not strip plgo from plgo.SetOf[T]")
+				}
+			}
+		}
+		return true
+	})
+}
+

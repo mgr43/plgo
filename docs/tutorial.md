@@ -344,14 +344,12 @@ show up when someone runs `\df+ petgreet` in psql. 🎉
 
 ```bash
 cd build
-sudo make install with_llvm=no
+sudo make install
 ```
 
 This copies `pgpet.so` to PostgreSQL's `$libdir` and the SQL/control files
 where PostgreSQL expects them.
 
-> ⚠️ `with_llvm=no` skips LLVM JIT compilation of the extension. Go-compiled
-> shared libraries don't support PG's JIT, so this flag avoids build errors.
 
 ### Load the extension
 
@@ -576,7 +574,7 @@ RUN apt-get update && \
 
 # Install the extension
 COPY --from=builder /src/build/ /tmp/pgpet-ext/
-RUN cd /tmp/pgpet-ext && make install with_llvm=no && rm -rf /tmp/pgpet-ext
+RUN cd /tmp/pgpet-ext && make install && rm -rf /tmp/pgpet-ext
 
 # Copy test files
 COPY test/sql/ /test/sql/
@@ -682,7 +680,7 @@ plgo .
 
 # Install into your local PostgreSQL
 cd build
-sudo make install with_llvm=no
+sudo make install
 cd ..
 ```
 
@@ -834,6 +832,7 @@ PostgreSQL types. Here's the complete list:
 | *(no return)* | `VOID` | Function returns nothing |
 | `*string` | `text` (nullable) | Return `nil` → SQL `NULL` |
 | `*int64` | `bigint` (nullable) | Any pointer type → nullable |
+| `plgo.SetOf[T]` | `SETOF <type>` | Returns multiple rows, one `T` per row |
 | `*plgo.TriggerData` | *(first param)* | Trigger functions only |
 | `*plgo.TriggerRow` | `trigger` | Trigger return type |
 
@@ -1031,6 +1030,123 @@ in PL/pgSQL.
 
 ---
 
+## Chapter 13: Set-Returning Functions (SETOF)
+
+So far, every function we've written returns a **single value**. But what if you
+want to return **multiple rows** — like a table-valued function you can use in
+`FROM` clauses?
+
+That's what `SETOF` is for. And plgo makes it dead simple with `plgo.SetOf[T]`.
+
+### The basics
+
+```go
+package main
+
+import "gitlab.com/microo8/plgo"
+
+// GenerateSeries returns integers from start to stop, one per row.
+func GenerateSeries(start, stop int32) plgo.SetOf[int32] {
+    result := make(plgo.SetOf[int32], 0, stop-start+1)
+    for i := start; i <= stop; i++ {
+        result = append(result, i)
+    }
+    return result
+}
+```
+
+That's it. `plgo.SetOf[int32]` is just `[]int32` under the hood, but the
+distinct type tells plgo to generate `RETURNS SETOF integer` instead of
+`RETURNS integer[]`.
+
+The difference matters:
+
+| Return type | SQL | Result |
+|---|---|---|
+| `[]int32` | `RETURNS integer[]` | **One row** containing an array: `{1,2,3,4,5}` |
+| `plgo.SetOf[int32]` | `RETURNS SETOF integer` | **Five rows**, each with one integer |
+
+### Using it in SQL
+
+```sql
+-- Like a table!
+SELECT * FROM generateseries(1, 5);
+--  generateseries
+-- ────────────────
+--              1
+--              2
+--              3
+--              4
+--              5
+
+-- In a JOIN
+SELECT u.name, s.n
+FROM users u
+JOIN generateseries(1, 3) AS s(n) ON true;
+
+-- In a WHERE EXISTS
+SELECT name FROM products
+WHERE EXISTS (SELECT 1 FROM generateseries(1, 10) s(n) WHERE s.n = products.id);
+```
+
+### Supported types
+
+`SetOf` works with every scalar type plgo supports:
+
+```go
+func TextRows() plgo.SetOf[string]   { ... }  // SETOF text
+func IntRows()  plgo.SetOf[int64]    { ... }  // SETOF bigint
+func NumRows()  plgo.SetOf[float64]  { ... }  // SETOF double precision
+func FlagRows() plgo.SetOf[bool]     { ... }  // SETOF boolean
+func BlobRows() plgo.SetOf[[]byte]   { ... }  // SETOF bytea
+```
+
+### Empty results
+
+Returning an empty slice produces zero rows — perfectly valid:
+
+```go
+func MaybeResults(want bool) plgo.SetOf[string] {
+    if !want {
+        return nil // zero rows
+    }
+    return plgo.SetOf[string]{"yes", "we", "have", "results"}
+}
+```
+
+```sql
+SELECT * FROM mayberesults(false);
+-- (0 rows)
+
+SELECT * FROM mayberesults(true);
+--  mayberesults
+-- ──────────────
+--  yes
+--  we
+--  have
+--  results
+```
+
+### How it works under the hood
+
+PostgreSQL's SRF protocol is... involved. The C function gets called **once per
+output row**, not once total. It uses `FuncCallContext` to persist state across
+calls, with macros like `SRF_IS_FIRSTCALL()`, `SRF_RETURN_NEXT()`, and
+`SRF_RETURN_DONE()`.
+
+plgo handles all of this for you. When you return `plgo.SetOf[int32]`, the
+generated wrapper:
+
+1. **First call**: runs your Go function, materializes the entire slice, converts
+   each element to a PostgreSQL `Datum`, stores them in PG's multi-call memory
+   context
+2. **Each subsequent call**: returns the next `Datum` via `SRF_RETURN_NEXT`
+3. **Final call**: signals `SRF_RETURN_DONE`
+
+You just return a slice. plgo does the rest. 🎉
+
+---
+
 ## Chapter 12: Deploying to Production
 
 ### Build on a matching system
@@ -1050,7 +1166,7 @@ scp -r build/ prod-server:/tmp/pgpet/
 # SSH in and install
 ssh prod-server
 cd /tmp/pgpet
-sudo make install with_llvm=no
+sudo make install
 ```
 
 ### Enable in your database
@@ -1066,7 +1182,7 @@ When you change your Go code:
 
 1. Rebuild: `plgo .`
 2. Copy new `build/` to server
-3. `sudo make install with_llvm=no`
+3. `sudo make install`
 4. In psql: `DROP EXTENSION pgpet; CREATE EXTENSION pgpet;`
 
 (PostgreSQL extension versioning is a deeper topic — for now, the

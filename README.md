@@ -27,7 +27,7 @@ func Hello(name string) string {
 
 ```
 $ plgo .
-$ cd build && sudo make install with_llvm=no
+$ cd build && sudo make install
 ```
 
 ```sql
@@ -140,7 +140,7 @@ func ConcatAll(tableName, colName string) string {
 ```bash
 plgo .                              # generates build/ directory
 cd build
-sudo make install with_llvm=no      # installs into PostgreSQL
+sudo make install                   # installs into PostgreSQL
 ```
 
 ### Use it!
@@ -203,6 +203,35 @@ func MaybeUpper(s string) *string {
     return &result
 }
 ```
+
+### Set-Returning Functions (SETOF)
+
+Return `plgo.SetOf[T]` to produce multiple rows — one value per row. These
+functions can be used in `FROM` clauses just like tables:
+
+```go
+func GenerateSeries(start, stop int32) plgo.SetOf[int32] {
+    result := make(plgo.SetOf[int32], 0, stop-start+1)
+    for i := start; i <= stop; i++ {
+        result = append(result, i)
+    }
+    return result
+}
+```
+
+```sql
+SELECT * FROM generateseries(1, 5);
+--  generateseries
+-- ────────────────
+--              1
+--              2
+--              3
+--              4
+--              5
+```
+
+`SetOf` works with any supported scalar type: `SetOf[string]`, `SetOf[int64]`,
+`SetOf[float64]`, `SetOf[bool]`, `SetOf[[]byte]`, etc.
 
 ### JSON Parameters
 
@@ -363,7 +392,7 @@ These are standard `*log.Logger` instances — use `Println`, `Printf`, `Fatal`,
 plgo is a **code generator**. When you run `plgo .`, it:
 
 1. **Parses** your Go package with `go/ast` — finds every exported function
-2. **Classifies** each function as a regular function, void function, or trigger function based on its signature
+2. **Classifies** each function as a regular function, void function, trigger function, or set-returning function based on its signature
 3. **Generates** CGo wrapper code that marshals PostgreSQL Datum types ↔ Go types
 4. **Injects** `PG_FUNCTION_INFO_V1` macros and `//export` directives
 5. **Builds** with `go build -buildmode=c-shared` → produces a native `.so` shared library
@@ -389,7 +418,7 @@ your_code.go                      build/
 make test-unit
 ```
 
-129 test cases covering AST parsing, code generation, SQL output, and type mapping — all without PostgreSQL.
+160 test cases covering AST parsing, code generation, SQL output, type mapping, and SETOF support — all without PostgreSQL.
 
 ### Run integration tests (requires Docker)
 
@@ -409,7 +438,7 @@ plgo/
 │   ├── modulewriter.go     #   Orchestrates code generation
 │   ├── functions.go        #   CodeWriter types, datumTypes map, SQL/code generation
 │   ├── visitors.go         #   AST visitors (FuncVisitor, Remover)
-│   └── plgo_test.go        #   129 unit tests
+│   └── plgo_test.go        #   160 unit tests
 ├── example/                # Example extension
 │   └── example_methods.go
 ├── test/                   # Integration test suite
@@ -440,7 +469,7 @@ plgo/
 - **Single return value only** — Go functions can return at most one value (no `(result, error)` pattern; use `logger.Fatal` for errors)
 - **No goroutines that touch the DB** — PostgreSQL's stack depth limit conflicts with Go's goroutine stack allocation. You can use goroutines for pure computation, but don't call SPI from a goroutine
 - **No custom composite types** — Only built-in scalar and array types are supported; no `CREATE TYPE` mapping (yet)
-- **No `SETOF` returns** — Functions cannot return multiple rows (yet)
+- **No `RETURNS TABLE`** — `SETOF` scalar types are supported, but multi-column `RETURNS TABLE(col1 type, col2 type)` is not (yet)
 - **Package must be `main`** — Your extension code must be in a `package main`
 
 ---

@@ -731,3 +731,20 @@ func ReverseBytea(v []byte) []byte {
 func StringArrayReturn() []string {
 	return []string{"a", "b", "c"}
 }
+
+// GenerateInts returns a set of integers from 1 to n.
+// Tests SETOF integer via plgo.SetOf[T].
+func GenerateInts(n int32) plgo.SetOf[int32] {
+	result := make(plgo.SetOf[int32], 0, n)
+	for i := int32(1); i <= n; i++ {
+		result = append(result, i)
+	}
+	return result
+}
+
+// GenerateWords returns a fixed set of words, one per row.
+// Tests SETOF text with no parameters.
+func GenerateWords() plgo.SetOf[string] {
+	return plgo.SetOf[string]{"hello", "world", "from", "plgo"}
+}
+

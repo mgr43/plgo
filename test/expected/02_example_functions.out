@@ -1,40 +1,53 @@
 -- 02_example_functions.sql: Test the example extension functions
 -- Test ConcatArray
-SELECT concatarray(array['hello',' ','world']);
+SELECT
+    concatarray (ARRAY['hello', ' ', 'world']);
  concatarray 
 -------------
  hello world
 (1 row)
 
-SELECT concatarray(array['a','b','c']);
+SELECT
+    concatarray (ARRAY['a', 'b', 'c']);
  concatarray 
 -------------
  abc
 (1 row)
 
-SELECT concatarray(array[]::text[]);
+SELECT
+    concatarray (ARRAY[]::text[]);
  concatarray 
 -------------
  
 (1 row)
 
 -- Test GzipCompress returns bytea (non-empty)
-SELECT length(gzipcompress('hello world'::bytea)) > 0 AS gzip_works;
+SELECT
+    length(gzipcompress ('hello world'::bytea)) > 0 AS gzip_works;
  gzip_works 
 ------------
  t
 (1 row)
 
 -- Test trigger
-CREATE TABLE test_trigger (id integer, value text);
+CREATE TABLE test_trigger (
+    id integer,
+    value text
+);
 CREATE TABLE
 CREATE TRIGGER test_created_time_trigger
     BEFORE INSERT ON test_trigger
-    FOR EACH ROW EXECUTE FUNCTION createdtimetrigger();
+    FOR EACH ROW
+    EXECUTE FUNCTION createdtimetrigger ();
 CREATE TRIGGER
-INSERT INTO test_trigger VALUES (1, 'abc');
+INSERT INTO test_trigger
+    VALUES (1, 'abc');
 INSERT 0 1
-SELECT id, value FROM test_trigger;
+SELECT
+    id,
+    value
+FROM
+    test_trigger;
  id | value  
 ----+--------
  11 | abcabc

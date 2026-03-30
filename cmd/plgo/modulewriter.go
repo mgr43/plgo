@@ -74,6 +74,12 @@ func (mw *ModuleWriter) WriteModule() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("Cannot get tempdir: %w", err)
 	}
+	// Create a go.mod for the temp build directory.
+	// Start from the user's go.mod (to preserve dependencies), but change
+	// the module name and remove the plgo dependency (pl.go is inlined).
+	if err := mw.writeBuildGoMod(tempPackagePath); err != nil {
+		return "", err
+	}
 	err = mw.writeUserPackage(tempPackagePath)
 	if err != nil {
 		return "", err
@@ -82,11 +88,47 @@ func (mw *ModuleWriter) WriteModule() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	err = mw.writeExportedMethods(tempPackagePath)
-	if err != nil {
-		return "", err
-	}
 	return tempPackagePath, nil
+}
+
+func (mw *ModuleWriter) writeBuildGoMod(tempPackagePath string) error {
+	absPackagePath, _ := filepath.Abs(".")
+	srcGoMod := filepath.Join(absPackagePath, "go.mod")
+	srcGoSum := filepath.Join(absPackagePath, "go.sum")
+
+	// Read the user's go.mod
+	data, err := os.ReadFile(srcGoMod)
+	if err != nil {
+		// No go.mod — write a minimal one
+		gomod := []byte("module plgo_build\n\ngo 1.22\n")
+		return os.WriteFile(filepath.Join(tempPackagePath, "go.mod"), gomod, 0o644)
+	}
+
+	// Replace module name and remove plgo require/replace lines
+	lines := strings.Split(string(data), "\n")
+	var out []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Replace module declaration
+		if strings.HasPrefix(trimmed, "module ") {
+			out = append(out, "module plgo_build")
+			continue
+		}
+		// Skip plgo dependency lines
+		if strings.Contains(trimmed, "gitlab.com/microo8/plgo") {
+			continue
+		}
+		out = append(out, line)
+	}
+	if err := os.WriteFile(filepath.Join(tempPackagePath, "go.mod"), []byte(strings.Join(out, "\n")), 0o644); err != nil {
+		return err
+	}
+
+	// Copy go.sum if it exists
+	if sumData, err := os.ReadFile(srcGoSum); err == nil {
+		_ = os.WriteFile(filepath.Join(tempPackagePath, "go.sum"), sumData, 0o644)
+	}
+	return nil
 }
 
 func (mw *ModuleWriter) writeUserPackage(tempPackagePath string) error {
@@ -135,7 +177,8 @@ func (mw *ModuleWriter) writeplgo(tempPackagePath string) error {
 		return err
 	}
 	plgoSource := string(plgoSourceBin)
-	plgoSource = "package main\n\n" + plgoSource[12:]
+	// Replace "package plgo" with "package main", handling any leading godoc comments
+	plgoSource = strings.Replace(plgoSource, "package plgo", "package main", 1)
 	postgresIncludeDir, err := exec.Command("pg_config", "--includedir-server").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Cannot run pg_config: %w", err)
@@ -145,45 +188,52 @@ func (mw *ModuleWriter) writeplgo(tempPackagePath string) error {
 
 	addOtherIncludesAndLDFLAGS(&plgoSource, postgresIncludeStr) // on mingw windows workarounds
 
-	var funcdec string
+	// Remove the funcdec and pgmodulemagic placeholders — they go in funcdec.go
+	plgoSource = strings.Replace(plgoSource, "//{funcdec}", "", 1)
+	plgoSource = strings.Replace(plgoSource, "//{pgmodulemagic}", "", 1)
+
+	// Generate //export wrapper functions and inject them into pl.go.
+	// They must be in the same file as the CGo type definitions so that
+	// Datum and funcInfo are visible to CGo's //export type checker.
+	var exportedFuncs bytes.Buffer
 	for _, f := range mw.functions {
-		funcdec += f.FuncDec()
+		f.Code(&exportedFuncs)
 	}
-	plgoSource = strings.Replace(plgoSource, "//{funcdec}", funcdec, 1)
+	plgoSource = strings.Replace(plgoSource, "//{exportedfuncs}", exportedFuncs.String(), 1)
+
 	err = os.WriteFile(filepath.Join(tempPackagePath, "pl.go"), []byte(plgoSource), 0o644)
 	if err != nil {
 		return fmt.Errorf("Cannot write file tempdir: %w", err)
 	}
-	return nil
-}
 
-func (mw *ModuleWriter) writeExportedMethods(tempPackagePath string) error {
-	buf := bytes.NewBuffer(nil)
-	_, err := buf.WriteString(`package main
+	// Write funcdec.go — a separate file with PG_MODULE_MAGIC and
+	// PG_FUNCTION_INFO_V1 macros. This must be separate from pl.go because
+	// CGo generates duplicate translation units for files with //export
+	// directives, and these macros create non-static C functions that would clash.
+	var funcdec string
+	for _, f := range mw.functions {
+		funcdec += f.FuncDec() + "\n"
+	}
+	funcdecSource := `package main
 
 /*
 #include "postgres.h"
-#include "utils/elog.h"
 #include "fmgr.h"
-extern void elog_error(char* string);
+#cgo CFLAGS: -I"` + postgresIncludeStr + `"
+
+#ifdef PG_MODULE_MAGIC
+PG_MODULE_MAGIC;
+#endif
+
+` + funcdec + `
 */
 import "C"
-`)
+`
+	err = os.WriteFile(filepath.Join(tempPackagePath, "funcdec.go"), []byte(funcdecSource), 0o644)
 	if err != nil {
-		return fmt.Errorf("Cannot write file tempdir: %w", err)
+		return fmt.Errorf("Cannot write funcdec.go: %w", err)
 	}
-	for _, f := range mw.functions {
-		f.Code(buf)
-	}
-	// fmt.Println(buf.String())
-	code, err := format.Source(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(filepath.Join(tempPackagePath, "methods.go"), code, 0o644)
-	if err != nil {
-		return fmt.Errorf("Cannot write file tempdir: %w", err)
-	}
+
 	return nil
 }
 
@@ -214,17 +264,23 @@ relocatable = true`)
 	return os.WriteFile(controlPath, control, 0o644)
 }
 
-// WriteMakefile writes .control file for the new postgresql extension
+// WriteMakefile writes Makefile for the new postgresql extension
 func (mw *ModuleWriter) WriteMakefile(path string) error {
 	makefile := []byte(`EXTENSION = ` + mw.PackageName + `
-DATA = ` + mw.PackageName + `--0.1.sql  # script files to install
-# REGRESS = ` + mw.PackageName + `_test     # our test script file (without extension)
-MODULES = ` + mw.PackageName + `          # our c module file to build
+DATA = ` + mw.PackageName + `--0.1.sql
 
-# postgres build stuff
-PG_CONFIG = pg_config
-PGXS := $(shell $(PG_CONFIG) --pgxs)
-include $(PGXS)`)
+PG_CONFIG ?= pg_config
+
+SHAREDIR = $(shell $(PG_CONFIG) --sharedir)
+PKGLIBDIR = $(shell $(PG_CONFIG) --pkglibdir)
+
+install:
+	install -d $(DESTDIR)$(SHAREDIR)/extension
+	install -m 644 $(EXTENSION).control $(DESTDIR)$(SHAREDIR)/extension/
+	install -m 644 $(DATA) $(DESTDIR)$(SHAREDIR)/extension/
+	install -d $(DESTDIR)$(PKGLIBDIR)
+	install -m 755 $(EXTENSION).so $(DESTDIR)$(PKGLIBDIR)/
+`)
 	makePath := filepath.Join(path, "Makefile")
 	return os.WriteFile(makePath, makefile, 0o644)
 }

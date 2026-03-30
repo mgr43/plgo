@@ -111,3 +111,25 @@ func MaybeUpper(s string) *string {
 	result := strings.ToUpper(s)
 	return &result
 }
+
+// GenerateSeries returns multiple rows, one integer per row.
+// Demonstrates SETOF (set-returning functions) using plgo.SetOf[T].
+// Usage: SELECT * FROM generateseries(1, 5);
+func GenerateSeries(start, stop int32) plgo.SetOf[int32] {
+	result := make(plgo.SetOf[int32], 0, stop-start+1)
+	for i := start; i <= stop; i++ {
+		result = append(result, i)
+	}
+	return result
+}
+
+// RepeatString returns the same string n times, one row per repetition.
+// Demonstrates SETOF text — useful in FROM clauses and JOINs.
+func RepeatString(s string, n int32) plgo.SetOf[string] {
+	result := make(plgo.SetOf[string], n)
+	for i := int32(0); i < n; i++ {
+		result[i] = s
+	}
+	return result
+}
+

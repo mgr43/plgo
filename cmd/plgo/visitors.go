@@ -56,6 +56,17 @@ func (v *Remover) Visit(node ast.Node) ast.Visitor {
 			break
 		}
 		n.X = sel.Sel
+	case *ast.IndexExpr:
+		// plgo.SetOf[T] → SetOf[T]
+		sel, ok := n.X.(*ast.SelectorExpr)
+		if !ok {
+			break
+		}
+		ident, ok := sel.X.(*ast.Ident)
+		if !ok || ident.Name != plgo {
+			break
+		}
+		n.X = sel.Sel
 	}
 	return v
 }

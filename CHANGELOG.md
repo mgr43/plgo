@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`SETOF` (set-returning functions)** — Functions can now return multiple rows using `plgo.SetOf[T]`:
+  - New generic type `plgo.SetOf[T any]` — user returns a slice, plgo generates the SRF protocol
+  - `SetOfFunction` code generator — emits `RETURNS SETOF <type>` SQL and SRF wrapper code
+  - Full PostgreSQL SRF C bridge: 12 helper functions wrapping `funcapi.h` macros (`SRF_IS_FIRSTCALL`, `SRF_RETURN_NEXT`, `SRF_RETURN_DONE`, etc.)
+  - Go-side SRF helpers: `srfIsFirstCall`, `srfInit`, `srfNext` with proper PG memory context management
+  - Supports all scalar element types: `SetOf[string]`, `SetOf[int32]`, `SetOf[float64]`, `SetOf[bool]`, `SetOf[[]byte]`, etc.
+  - 31 new unit tests for SETOF (AST parsing, SQL generation, code generation, visitor)
+  - Integration tests: `GenerateInts(5)` → 5 rows, `GenerateWords()` → 4 rows, empty set → 0 rows
+  - Example functions: `GenerateSeries`, `RepeatString`
 - **Go modules support** — Project now uses `go.mod` with `go 1.22` minimum; no more `GOPATH` dependency
 - **PostgreSQL 18 compatibility** — Verified and tested against PostgreSQL 18 C API
 - **Docker-based integration tests** — Multi-stage `Dockerfile` (Go 1.26 builder + PG 18 runner) with SQL test harness

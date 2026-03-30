@@ -10,6 +10,7 @@ import (
 const (
 	triggerData = "TriggerData"
 	triggerRow  = "TriggerRow"
+	setOf       = "SetOf"
 )
 
 var datumTypes = map[string]string{
@@ -55,7 +56,7 @@ func NewCode(function *ast.FuncDecl) (CodeWriter, error) {
 	if err != nil {
 		return nil, err
 	}
-	returnType, isStar, err := getReturnType(function.Name.Name, function.Type.Results)
+	returnType, isStar, isSetOf, err := getReturnType(function.Name.Name, function.Type.Results)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +69,12 @@ func NewCode(function *ast.FuncDecl) (CodeWriter, error) {
 	}
 	if returnType == "" {
 		return &VoidFunction{Name: function.Name.Name, Params: params, Doc: function.Doc.Text()}, nil
+	}
+	if isSetOf {
+		return &SetOfFunction{
+			VoidFunction: VoidFunction{Name: function.Name.Name, Params: params, Doc: function.Doc.Text()},
+			ElementType:  returnType,
+		}, nil
 	}
 	return &Function{VoidFunction: VoidFunction{Name: function.Name.Name, Params: params, Doc: function.Doc.Text()}, ReturnType: returnType, IsStar: isStar}, nil
 }
@@ -121,13 +128,13 @@ func getParamList(function *ast.FuncDecl) (Params []Param, err error) {
 	return
 }
 
-func getReturnType(functionName string, results *ast.FieldList) (string, bool, error) {
+func getReturnType(functionName string, results *ast.FieldList) (string, bool, bool, error) {
 	// Result is void
 	if results == nil {
-		return "", false, nil
+		return "", false, false, nil
 	}
 	if len(results.List) > 1 {
-		return "", false, fmt.Errorf("Function %s has multiple return types", functionName)
+		return "", false, false, fmt.Errorf("Function %s has multiple return types", functionName)
 	}
 	switch res := results.List[0].Type.(type) {
 	case *ast.StarExpr:
@@ -135,36 +142,63 @@ func getReturnType(functionName string, results *ast.FieldList) (string, bool, e
 		ident, ok := res.X.(*ast.Ident)
 		if ok {
 			if _, ok := datumTypes[ident.Name]; !ok {
-				return "", false, fmt.Errorf("Function %s has not suported return type", functionName)
+				return "", false, false, fmt.Errorf("Function %s has not suported return type", functionName)
 			}
-			return ident.Name, true, nil
+			return ident.Name, true, false, nil
 		}
 		selector, ok = res.X.(*ast.SelectorExpr)
 		if !ok {
-			return "", false, fmt.Errorf("Function %s has not supported return type", functionName)
+			return "", false, false, fmt.Errorf("Function %s has not supported return type", functionName)
 		}
 		var pkg *ast.Ident
 		pkg, ok = selector.X.(*ast.Ident)
 		if !ok {
-			return "", false, fmt.Errorf("Function %s has not supported return type", functionName)
+			return "", false, false, fmt.Errorf("Function %s has not supported return type", functionName)
 		}
 		if pkg.Name != plgo || selector.Sel.Name != triggerRow {
-			return "", false, fmt.Errorf("Function %s has not supported return type", functionName)
+			return "", false, false, fmt.Errorf("Function %s has not supported return type", functionName)
 		}
-		return "TriggerRow", false, nil
+		return "TriggerRow", false, false, nil
 	case *ast.Ident:
 		if _, ok := datumTypes[res.Name]; !ok {
-			return "", false, fmt.Errorf("Function %s has not suported return type", functionName)
+			return "", false, false, fmt.Errorf("Function %s has not suported return type", functionName)
 		}
-		return res.Name, false, nil
+		return res.Name, false, false, nil
 	case *ast.ArrayType:
 		ident, ok := res.Elt.(*ast.Ident)
 		if !ok {
-			return "", false, fmt.Errorf("Function %s has not supported return type", functionName)
+			return "", false, false, fmt.Errorf("Function %s has not supported return type", functionName)
 		}
-		return "[]" + ident.Name, false, nil
+		return "[]" + ident.Name, false, false, nil
+	case *ast.IndexExpr:
+		// plgo.SetOf[T] — generic set-returning function
+		sel, ok := res.X.(*ast.SelectorExpr)
+		if !ok {
+			return "", false, false, fmt.Errorf("Function %s has not supported return type", functionName)
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || pkg.Name != plgo || sel.Sel.Name != setOf {
+			return "", false, false, fmt.Errorf("Function %s has not supported return type", functionName)
+		}
+		// Extract the type parameter T
+		switch idx := res.Index.(type) {
+		case *ast.Ident:
+			if _, ok := datumTypes[idx.Name]; !ok {
+				return "", false, false, fmt.Errorf("Function %s: SetOf element type %s not supported", functionName, idx.Name)
+			}
+			return idx.Name, false, true, nil
+		case *ast.ArrayType:
+			// SetOf[[]byte] for SETOF bytea
+			elt, ok := idx.Elt.(*ast.Ident)
+			if !ok || elt.Name != "byte" {
+				return "", false, false, fmt.Errorf("Function %s: SetOf with array element type not supported (except []byte)", functionName)
+			}
+			return "[]byte", false, true, nil
+		default:
+			return "", false, false, fmt.Errorf("Function %s: unsupported SetOf type parameter", functionName)
+		}
 	default:
-		return "", false, fmt.Errorf("Function %s has not suported return type", functionName)
+		return "", false, false, fmt.Errorf("Function %s has not suported return type", functionName)
 	}
 }
 
@@ -232,7 +266,9 @@ func (f *VoidFunction) Comment(w io.Writer) {
 	for _, p := range f.Params {
 		paramTypes = append(paramTypes, datumTypes[p.Type])
 	}
-	w.Write([]byte("COMMENT ON FUNCTION " + f.Name + "(" + strings.Join(paramTypes, ",") + ") IS '" + f.Doc + "';\n\n"))
+	// Escape single quotes for SQL string literal
+	escapedDoc := strings.ReplaceAll(f.Doc, "'", "''")
+	w.Write([]byte("COMMENT ON FUNCTION " + f.Name + "(" + strings.Join(paramTypes, ",") + ") IS '" + escapedDoc + "';\n\n"))
 }
 
 // Function is a list of parameters and the return type
@@ -271,7 +307,7 @@ func (f *Function) Code(w io.Writer) {
 	if f.IsStar {
 		w.Write([]byte(`
 		if(ret==nil){
-			fcinfo.isnull=C.char(1);
+			fcinfo.isnull=C._Bool(true);
 			return toDatum(nil)
 		}
 		return toDatum(*ret)
@@ -355,3 +391,69 @@ func (f *TriggerFunction) SQL(packageName string, w io.Writer) {
 	}
 	f.Comment(w)
 }
+
+// SetOfFunction generates a set-returning function (RETURNS SETOF <type>).
+// The user's Go function returns plgo.SetOf[T] which is materialized into
+// a slice, then yielded row-by-row via the PostgreSQL SRF protocol.
+type SetOfFunction struct {
+	VoidFunction
+	ElementType string // Go type of each row element (e.g., "string", "int64")
+}
+
+// Code writes the SRF wrapper function
+func (f *SetOfFunction) Code(w io.Writer) {
+	w.Write([]byte("//export " + f.Name + "\nfunc " + f.Name + "(fcinfo *funcInfo) Datum {\n"))
+	w.Write([]byte("if srfIsFirstCall(fcinfo) {\n"))
+	if len(f.Params) > 0 {
+		for _, p := range f.Params {
+			w.Write([]byte("var " + p.Name + " " + p.Type + "\n"))
+		}
+		w.Write([]byte("err:=fcinfo.Scan(\n"))
+		for _, p := range f.Params {
+			w.Write([]byte("&" + p.Name + ",\n"))
+		}
+		w.Write([]byte(")\n"))
+		w.Write([]byte(`
+		if(err!=nil){
+			C.elog_error(C.CString(
+				err.Error(),
+			))
+		}
+		`))
+	}
+	w.Write([]byte("result := __" + f.Name + "(\n"))
+	for _, p := range f.Params {
+		w.Write([]byte(p.Name + ",\n"))
+	}
+	w.Write([]byte(")\n"))
+	// Convert the typed slice to []interface{} for srfInit
+	w.Write([]byte("vals := make([]interface{}, len(result))\n"))
+	w.Write([]byte("for i, v := range result {\n"))
+	w.Write([]byte("vals[i] = v\n"))
+	w.Write([]byte("}\n"))
+	w.Write([]byte("srfInit(fcinfo, vals)\n"))
+	w.Write([]byte("}\n")) // end if srfIsFirstCall
+	w.Write([]byte("return srfNext(fcinfo)\n"))
+	w.Write([]byte("}\n"))
+}
+
+// SQL writes the SQL command that creates a SETOF function in DB
+func (f *SetOfFunction) SQL(packageName string, w io.Writer) {
+	w.Write([]byte("CREATE OR REPLACE FUNCTION " + f.Name + "("))
+	var paramsString []string
+	for _, p := range f.Params {
+		paramsString = append(paramsString, p.Name+" "+datumTypes[p.Type])
+	}
+	w.Write([]byte(strings.Join(paramsString, ",")))
+	w.Write([]byte(")\n"))
+	pgType := datumTypes[f.ElementType]
+	w.Write([]byte("RETURNS SETOF " + pgType + " AS\n"))
+	w.Write([]byte("'$libdir/" + packageName + "', '" + f.Name + "'\n"))
+	w.Write([]byte("LANGUAGE c VOLATILE STRICT;\n"))
+	if f.Doc == "" {
+		w.Write([]byte("\n"))
+		return
+	}
+	f.Comment(w)
+}
+

@@ -30,13 +30,15 @@ FROM postgres:18
 
 RUN apt-get update && apt-get install -y make postgresql-server-dev-18 && rm -rf /var/lib/apt/lists/*
 
+ENV PATH="/usr/lib/postgresql/18/bin:$PATH"
+
 # Install example extension
 COPY --from=builder /src/example/build/ /tmp/example-ext/
-RUN cd /tmp/example-ext && make install with_llvm=no && rm -rf /tmp/example-ext
+RUN cd /tmp/example-ext && make install && rm -rf /tmp/example-ext
 
 # Install test extension
 COPY --from=builder /src/test/build/ /tmp/test-ext/
-RUN cd /tmp/test-ext && make install with_llvm=no && rm -rf /tmp/test-ext
+RUN cd /tmp/test-ext && make install && rm -rf /tmp/test-ext
 
 # Copy SQL integration tests
 COPY test/sql/ /test/sql/

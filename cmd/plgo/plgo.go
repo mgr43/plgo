@@ -27,13 +27,15 @@ func buildPackage(buildPath, packageName string) error {
 	if runtime.GOOS == "windows" {
 		fileExt = ".dll"
 	}
+	absOut, err := filepath.Abs(filepath.Join("build", packageName+fileExt))
+	if err != nil {
+		return fmt.Errorf("Cannot resolve output path: %s", err)
+	}
 	goBuild := exec.Command("go", "build", switchx,
 		"-buildmode=c-shared",
-		"-o", filepath.Join("build", packageName+fileExt),
-		filepath.Join(buildPath, "package.go"),
-		filepath.Join(buildPath, "methods.go"),
-		filepath.Join(buildPath, "pl.go"),
+		"-o", absOut,
 	)
+	goBuild.Dir = buildPath
 	goBuild.Stdout = os.Stdout
 	goBuild.Stderr = os.Stderr
 	if err := goBuild.Run(); err != nil {
@@ -53,41 +55,41 @@ func main() {
 	}
 	moduleWriter, err := NewModuleWriter(packagePath)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 		printUsage()
-		return
+		os.Exit(1)
 	}
 	tempPackagePath, err := moduleWriter.WriteModule()
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	log.Println(tempPackagePath)
 	if _, err = os.Stat("build"); os.IsNotExist(err) {
 		err = os.Mkdir("build", 0o744)
 		if err != nil {
-			fmt.Println(err)
-			return
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 	}
 	err = buildPackage(tempPackagePath, moduleWriter.PackageName)
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	err = moduleWriter.WriteSQL("build")
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	err = moduleWriter.WriteControl("build")
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 	err = moduleWriter.WriteMakefile("build")
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }

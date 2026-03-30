@@ -36,47 +36,46 @@ typedef unsigned int uint;
 #include "utils/rel.h"
 #include "utils/lsyscache.h"
 #include "utils/jsonb.h"
+#include "funcapi.h"
 
-#ifdef PG_MODULE_MAGIC
-PG_MODULE_MAGIC;
-#endif
+//{pgmodulemagic}
 
-int __varsize(void *var) {
+static int __varsize(void *var) {
     return VARSIZE(var);
 }
 
-int __varsize_any(void *var) {
+static int __varsize_any(void *var) {
     return VARSIZE_ANY_EXHDR(var);
 }
 
-void elog_notice(char* string) {
+static void elog_notice(char* string) {
     elog(NOTICE, string, "");
 }
 
-void elog_error(char* string) {
+static void elog_error(char* string) {
     elog(ERROR, string, "");
 }
 
-Datum get_arg(PG_FUNCTION_ARGS, uint i) {
+static Datum get_arg(PG_FUNCTION_ARGS, uint i) {
 	return PG_GETARG_DATUM(i);
 }
 
-HeapTuple get_heap_tuple(HeapTuple* ht, uint i) {
+static HeapTuple get_heap_tuple(HeapTuple* ht, uint i) {
     return ht[i];
 }
 
-Datum get_col_as_datum(HeapTuple ht, TupleDesc td, int colnumber) {
+static Datum get_col_as_datum(HeapTuple ht, TupleDesc td, int colnumber) {
     bool isNull;
     Datum ret = SPI_getbinval(ht, td, colnumber + 1, &isNull);
 	if (isNull) PG_RETURN_VOID();
 	return ret;
 }
 
-bool called_as_trigger(PG_FUNCTION_ARGS) {
+static bool called_as_trigger(PG_FUNCTION_ARGS) {
 	return CALLED_AS_TRIGGER(fcinfo);
 }
 
-Datum get_heap_getattr(HeapTuple ht, uint i, TupleDesc td) {
+static Datum get_heap_getattr(HeapTuple ht, uint i, TupleDesc td) {
 	bool isNull;
 	Datum ret = heap_getattr(ht, i, td, &isNull);
 	if (isNull) PG_RETURN_VOID();
@@ -84,70 +83,70 @@ Datum get_heap_getattr(HeapTuple ht, uint i, TupleDesc td) {
 }
 
 //val to datum//////////////////////////////////////////////////
-Datum void_datum(){
+static Datum void_datum(){
     PG_RETURN_VOID();
 }
 
-Datum bytes_to_datum(void *val, uint len) {
+static Datum bytes_to_datum(void *val, uint len) {
 	void *v = (void *)palloc(len + VARHDRSZ);
 	SET_VARSIZE(v, len + VARHDRSZ);
 	memcpy(VARDATA(v), val, len);
 	return PointerGetDatum(v);
 }
 
-Datum cstring_to_datum(char *val) {
+static Datum cstring_to_datum(char *val) {
     return PointerGetDatum(cstring_to_text(val));
 }
 
-Datum int16_to_datum(int16 val) {
+static Datum int16_to_datum(int16 val) {
     return Int16GetDatum(val);
 }
 
-Datum uint16_to_datum(uint16 val) {
+static Datum uint16_to_datum(uint16 val) {
     return UInt16GetDatum(val);
 }
 
-Datum int32_to_datum(int32 val) {
+static Datum int32_to_datum(int32 val) {
     return Int32GetDatum(val);
 }
 
-Datum uint32_to_datum(uint32 val) {
+static Datum uint32_to_datum(uint32 val) {
     return UInt32GetDatum(val);
 }
 
-Datum int64_to_datum(int64 val) {
+static Datum int64_to_datum(int64 val) {
     return Int64GetDatum(val);
 }
 
-Datum date_to_datum(DateADT val){
+static Datum date_to_datum(DateADT val){
 	return DateADTGetDatum(val);
 }
 
-Datum time_to_datum(TimeADT val){
+static Datum time_to_datum(TimeADT val){
 	return TimestampGetDatum(val);
 }
 
-Datum timetz_to_datum(TimestampTz val) {
+static Datum timetz_to_datum(TimestampTz val) {
 	return TimestampTzGetDatum(val);
 }
 
-Datum bool_to_datum(bool val) {
+static Datum bool_to_datum(bool val) {
 	return BoolGetDatum(val);
 }
 
-Datum float4_to_datum(float val) {
+static Datum float4_to_datum(float val) {
 	return Float4GetDatum(val);
 }
 
-Datum float8_to_datum(double val) {
+static Datum float8_to_datum(double val) {
 	return Float8GetDatum(val);
 }
 
-Datum heap_tuple_to_datum(HeapTuple val) {
+static Datum heap_tuple_to_datum(HeapTuple val) {
 	return PointerGetDatum(val);
 }
 
-Datum array_to_datum(Oid element_type, Datum* vals, int size) {
+static Datum array_to_datum(Oid element_type, Datum* vals, int size) {
 	ArrayType *result;
 	bool* isnull = (bool *)palloc0(sizeof(bool)*size);
     int dims[1];
@@ -167,79 +166,79 @@ Datum array_to_datum(Oid element_type, Datum* vals, int size) {
     PG_RETURN_ARRAYTYPE_P(result);
 }
 
-Datum jsonb_to_datum(char* val) {
+static Datum jsonb_to_datum(char* val) {
 	return (Datum) DatumGetJsonbP(DirectFunctionCall1(jsonb_in, (Datum) (char *) val));
 }
 
 //Datum to val //////////////////////////////////////////////////////////
-char* datum_to_cstring(Datum val) {
+static char* datum_to_cstring(Datum val) {
     return text_to_cstring((struct varlena *) DatumGetPointer(val));
 }
 
-char* datum_to_cstring_by_oid(Oid typeoid, Datum val) {
+static char* datum_to_cstring_by_oid(Oid typeoid, Datum val) {
     Oid typoutput;
     bool typIsVarlena;
     getTypeOutputInfo(typeoid, &typoutput, &typIsVarlena);
     return OidOutputFunctionCall(typoutput, val);
 }
 
-bytea* datum_to_byteap(Datum val) {
+static bytea* datum_to_byteap(Datum val) {
     return DatumGetByteaPP(val);
 }
 
-unsigned char * bytea_to_chars(bytea* val) {
+static unsigned char * bytea_to_chars(bytea* val) {
     return  ((unsigned char *)VARDATA_ANY(val));
 }
 
-int16 datum_to_int16(Datum val) {
+static int16 datum_to_int16(Datum val) {
     return DatumGetInt16(val);
 }
 
-uint16 datum_to_uint16(Datum val) {
+static uint16 datum_to_uint16(Datum val) {
     return DatumGetUInt16(val);
 }
 
-int32 datum_to_int32(Datum val) {
+static int32 datum_to_int32(Datum val) {
     return DatumGetInt32(val);
 }
 
-uint32 datum_to_uint32(Datum val) {
+static uint32 datum_to_uint32(Datum val) {
     return DatumGetUInt32(val);
 }
 
-int64 datum_to_int64(Datum val) {
+static int64 datum_to_int64(Datum val) {
     return DatumGetInt64(val);
 }
 
-DateADT datum_to_date(Datum val) {
+static DateADT datum_to_date(Datum val) {
 	return DatumGetDateADT(val);
 }
 
-Timestamp datum_to_time(Datum val) {
+static Timestamp datum_to_time(Datum val) {
 	return DatumGetTimestamp(val);
 }
 
-TimestampTz datum_to_timetz(Datum val) {
+static TimestampTz datum_to_timetz(Datum val) {
 	return DatumGetTimestampTz(val);
 }
 
-bool datum_to_bool(Datum val) {
+static bool datum_to_bool(Datum val) {
 	return DatumGetBool(val);
 }
 
-float datum_to_float4(Datum val) {
+static float datum_to_float4(Datum val) {
 	return DatumGetFloat4(val);
 }
 
-double datum_to_float8(Datum val) {
+static double datum_to_float8(Datum val) {
 	return DatumGetFloat8(val);
 }
 
-HeapTuple datum_to_heap_tuple(Datum val) {
+static HeapTuple datum_to_heap_tuple(Datum val) {
 	return (HeapTuple) DatumGetPointer(val);
 }
 
-Datum* datum_to_array(Datum val, int* nelemsp) {
+static Datum* datum_to_array(Datum val, int* nelemsp) {
 	ArrayType* array = DatumGetArrayTypeP(val);
 
     int16 typlen;
@@ -256,50 +255,99 @@ Datum* datum_to_array(Datum val, int* nelemsp) {
 	return result;
 }
 
-char* unknown_to_char(Datum val) {
+static char* unknown_to_char(Datum val) {
 	return (char*)val;
 }
 
-char* datum_to_jsonb_cstring(Datum val) {
+static char* datum_to_jsonb_cstring(Datum val) {
 	Jsonb *jsonb = DatumGetJsonbP(val);
 	return JsonbToCString(NULL, &jsonb->root, VARSIZE(jsonb));
 }
 
 //TriggerData functions/////////////////////////////////////////////
-bool trigger_fired_before(TriggerEvent tg_event) {
+static bool trigger_fired_before(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_BEFORE(tg_event);
 }
 
-bool trigger_fired_after(TriggerEvent tg_event) {
+static bool trigger_fired_after(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_AFTER(tg_event);
 }
 
-bool trigger_fired_instead(TriggerEvent tg_event) {
+static bool trigger_fired_instead(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_INSTEAD(tg_event);
 }
 
-bool trigger_fired_for_row(TriggerEvent tg_event) {
+static bool trigger_fired_for_row(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_FOR_ROW(tg_event);
 }
 
-bool trigger_fired_for_statement(TriggerEvent tg_event) {
+static bool trigger_fired_for_statement(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_FOR_STATEMENT(tg_event);
 }
 
-bool trigger_fired_by_insert(TriggerEvent tg_event) {
+static bool trigger_fired_by_insert(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_BY_INSERT(tg_event);
 }
 
-bool trigger_fired_by_update(TriggerEvent tg_event) {
+static bool trigger_fired_by_update(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_BY_UPDATE(tg_event);
 }
 
-bool trigger_fired_by_delete(TriggerEvent tg_event) {
+static bool trigger_fired_by_delete(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_BY_DELETE(tg_event);
 }
 
-bool trigger_fired_by_truncate(TriggerEvent tg_event) {
+static bool trigger_fired_by_truncate(TriggerEvent tg_event) {
 	return TRIGGER_FIRED_BY_TRUNCATE(tg_event);
+}
+
+//SRF (Set Returning Function) helpers /////////////////////////////
+static bool srf_is_firstcall(PG_FUNCTION_ARGS) {
+	return SRF_IS_FIRSTCALL();
+}
+
+static FuncCallContext* srf_firstcall_init(PG_FUNCTION_ARGS) {
+	return SRF_FIRSTCALL_INIT();
+}
+
+static FuncCallContext* srf_percall_setup(PG_FUNCTION_ARGS) {
+	return SRF_PERCALL_SETUP();
+}
+
+static Datum srf_return_next(PG_FUNCTION_ARGS, FuncCallContext *funcctx, Datum result) {
+	SRF_RETURN_NEXT(funcctx, result);
+}
+
+static Datum srf_return_done(PG_FUNCTION_ARGS, FuncCallContext *funcctx) {
+	SRF_RETURN_DONE(funcctx);
+}
+
+static void srf_set_max_calls(FuncCallContext *funcctx, uint64 n) {
+	funcctx->max_calls = n;
+}
+
+static uint64 srf_get_call_cntr(FuncCallContext *funcctx) {
+	return funcctx->call_cntr;
+}
+
+static void srf_set_user_fctx(FuncCallContext *funcctx, void *ptr) {
+	funcctx->user_fctx = ptr;
+}
+
+static void* srf_get_user_fctx(FuncCallContext *funcctx) {
+	return funcctx->user_fctx;
+}
+
+static MemoryContext srf_switch_memory_ctx(FuncCallContext *funcctx) {
+	return MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+}
+
+static void srf_restore_memory_ctx(MemoryContext oldctx) {
+	MemoryContextSwitchTo(oldctx);
+}
+
+static Datum* srf_palloc_datums(int n) {
+	return (Datum*) palloc(sizeof(Datum) * n);
 }
 
 //{funcdec}
@@ -657,6 +705,60 @@ func toDatum(val interface{}) Datum {
 	default:
 		return (Datum)(C.void_datum())
 	}
+}
+
+// SetOf is a generic type for functions that return SETOF (multiple rows).
+// A function returning SetOf[T] generates RETURNS SETOF <pgtype> in SQL
+// and uses PostgreSQL's SRF (Set Returning Function) protocol.
+//
+//	func GenerateSeries(n int32) plgo.SetOf[int32] {
+//	    result := make(plgo.SetOf[int32], 0, n)
+//	    for i := int32(1); i <= n; i++ {
+//	        result = append(result, i)
+//	    }
+//	    return result
+//	}
+type SetOf[T any] []T
+
+// srfIsFirstCall returns true if this is the first call in an SRF invocation.
+func srfIsFirstCall(fcinfo *funcInfo) bool {
+	return C.srf_is_firstcall((*C.struct_FunctionCallInfoBaseData)(unsafe.Pointer(fcinfo))) == (C._Bool)(true)
+}
+
+// srfInit initializes the SRF context on the first call. It converts the
+// Go slice to an array of C Datums allocated in PG's multi-call memory context,
+// stores the pointer in user_fctx, and sets max_calls.
+func srfInit(fcinfo *funcInfo, vals []interface{}) {
+	funcctx := C.srf_firstcall_init((*C.struct_FunctionCallInfoBaseData)(unsafe.Pointer(fcinfo)))
+	oldctx := C.srf_switch_memory_ctx(funcctx)
+
+	n := len(vals)
+	C.srf_set_max_calls(funcctx, C.uint64(n))
+	if n > 0 {
+		datums := C.srf_palloc_datums(C.int(n))
+		datumSlice := unsafe.Slice((*C.Datum)(datums), n)
+		for i, v := range vals {
+			datumSlice[i] = (C.Datum)(toDatum(v))
+		}
+		C.srf_set_user_fctx(funcctx, unsafe.Pointer(datums))
+	}
+
+	C.srf_restore_memory_ctx(oldctx)
+}
+
+// srfNext returns the next Datum from the SRF, or signals done.
+// Must be called on every invocation (including the first, after srfInit).
+func srfNext(fcinfo *funcInfo) Datum {
+	funcctx := C.srf_percall_setup((*C.struct_FunctionCallInfoBaseData)(unsafe.Pointer(fcinfo)))
+	cntr := C.srf_get_call_cntr(funcctx)
+	cFcinfo := (*C.struct_FunctionCallInfoBaseData)(unsafe.Pointer(fcinfo))
+	if cntr < C.uint64(funcctx.max_calls) {
+		datums := (*C.Datum)(C.srf_get_user_fctx(funcctx))
+		datumSlice := unsafe.Slice(datums, int(funcctx.max_calls))
+		result := datumSlice[int(cntr)]
+		return (Datum)(C.srf_return_next(cFcinfo, funcctx, result))
+	}
+	return (Datum)(C.srf_return_done(cFcinfo, funcctx))
 }
 
 // Stmt represents a prepared SQL statement created by DB.Prepare().
@@ -1102,3 +1204,6 @@ func scanVal(oid C.Oid, typeName string, val C.Datum, arg interface{}) error {
 	}
 	return nil
 }
+
+//{exportedfuncs}
+

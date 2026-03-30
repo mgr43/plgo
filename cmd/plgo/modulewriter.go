@@ -2,25 +2,24 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/ast"
-	"go/build"
 	"go/format"
 	"go/parser"
 	"go/token"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-//ToUnexported changes Exported function name to unexported
+// ToUnexported changes Exported function name to unexported
 func ToUnexported(name string) string {
 	return strings.ToLower(name[0:1]) + name[1:]
 }
 
-//ModuleWriter writes the tmp module wrapper that will be build to shared object
+// ModuleWriter writes the tmp module wrapper that will be build to shared object
 type ModuleWriter struct {
 	PackageName string
 	Doc         string
@@ -29,7 +28,7 @@ type ModuleWriter struct {
 	functions   []CodeWriter
 }
 
-//NewModuleWriter parses the go package and returns the FileSet and AST
+// NewModuleWriter parses the go package and returns the FileSet and AST
 func NewModuleWriter(packagePath string) (*ModuleWriter, error) {
 	fset := token.NewFileSet()
 	// skip _test files in current package
@@ -55,7 +54,7 @@ func NewModuleWriter(packagePath string) (*ModuleWriter, error) {
 	for _, packageFile := range packageAst.Files {
 		packageDoc += packageFile.Doc.Text() + "\n"
 	}
-	//collect functions from the package
+	// collect functions from the package
 	funcVisitor := new(FuncVisitor)
 	ast.Walk(funcVisitor, packageAst)
 	if funcVisitor.err != nil {
@@ -69,7 +68,7 @@ func NewModuleWriter(packagePath string) (*ModuleWriter, error) {
 	return &ModuleWriter{PackageName: packageName, Doc: packageDoc, fset: fset, packageAst: packageAst, functions: funcVisitor.functions}, nil
 }
 
-//WriteModule writes the tmp module wrapper
+// WriteModule writes the tmp module wrapper
 func (mw *ModuleWriter) WriteModule() (string, error) {
 	tempPackagePath, err := buildPath()
 	if err != nil {
@@ -107,21 +106,27 @@ func (mw *ModuleWriter) writeUserPackage(tempPackagePath string) error {
 }
 
 func readPlGoSource() ([]byte, error) {
-	goPath := os.Getenv("GOPATH")
-	if goPath == "" {
-		goPath = build.Default.GOPATH // Go 1.8 and later have a default GOPATH
+	// Use 'go list' to find the module's source directory in the module cache
+	cmd := exec.Command("go", "list", "-m", "-json", "gitlab.com/microo8/plgo")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("Cannot locate plgo module: %w\nPlease install it with: go install gitlab.com/microo8/plgo/plgo@latest", err)
 	}
-	for _, goPathElement := range filepath.SplitList(goPath) {
-		rv, err := ioutil.ReadFile(filepath.Join(goPathElement, "src", "gitlab.com", "microo8", "plgo", "pl.go"))
-		if err == nil {
-			return rv, nil
-		} else if os.IsNotExist(err) {
-			continue // try the next
-		} else {
-			return nil, fmt.Errorf("Cannot read plgo package: %w", err)
-		}
+	var modInfo struct {
+		Dir string `json:"Dir"`
 	}
-	return nil, fmt.Errorf("Package gitlab.com/microo8/plgo not installed\nplease install it with: go get -u gitlab.com/microo8/plgo/plgo")
+	if err := json.Unmarshal(out, &modInfo); err != nil {
+		return nil, fmt.Errorf("Cannot parse module info: %w", err)
+	}
+	if modInfo.Dir == "" {
+		return nil, fmt.Errorf("Module gitlab.com/microo8/plgo not found\nPlease install it with: go install gitlab.com/microo8/plgo/plgo@latest")
+	}
+	plgoPath := filepath.Join(modInfo.Dir, "pl.go")
+	rv, err := os.ReadFile(plgoPath)
+	if err != nil {
+		return nil, fmt.Errorf("Cannot read plgo source at %s: %w", plgoPath, err)
+	}
+	return rv, nil
 }
 
 func (mw *ModuleWriter) writeplgo(tempPackagePath string) error {
@@ -145,7 +150,7 @@ func (mw *ModuleWriter) writeplgo(tempPackagePath string) error {
 		funcdec += f.FuncDec()
 	}
 	plgoSource = strings.Replace(plgoSource, "//{funcdec}", funcdec, 1)
-	err = ioutil.WriteFile(filepath.Join(tempPackagePath, "pl.go"), []byte(plgoSource), 0644)
+	err = os.WriteFile(filepath.Join(tempPackagePath, "pl.go"), []byte(plgoSource), 0o644)
 	if err != nil {
 		return fmt.Errorf("Cannot write file tempdir: %w", err)
 	}
@@ -170,19 +175,19 @@ import "C"
 	for _, f := range mw.functions {
 		f.Code(buf)
 	}
-	//fmt.Println(buf.String())
+	// fmt.Println(buf.String())
 	code, err := format.Source(buf.Bytes())
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(filepath.Join(tempPackagePath, "methods.go"), code, 0644)
+	err = os.WriteFile(filepath.Join(tempPackagePath, "methods.go"), code, 0o644)
 	if err != nil {
 		return fmt.Errorf("Cannot write file tempdir: %w", err)
 	}
 	return nil
 }
 
-//WriteSQL writes sql file with commands to create functions in DB
+// WriteSQL writes sql file with commands to create functions in DB
 func (mw *ModuleWriter) WriteSQL(tempPackagePath string) error {
 	sqlPath := filepath.Join(tempPackagePath, mw.PackageName+"--0.1.sql")
 	sqlFile, err := os.Create(sqlPath)
@@ -199,17 +204,17 @@ func (mw *ModuleWriter) WriteSQL(tempPackagePath string) error {
 	return nil
 }
 
-//WriteControl writes .control file for the new postgresql extension
+// WriteControl writes .control file for the new postgresql extension
 func (mw *ModuleWriter) WriteControl(path string) error {
 	control := []byte(`# ` + mw.PackageName + ` extension
 comment = '` + mw.PackageName + ` extension'
 default_version = '0.1'
 relocatable = true`)
 	controlPath := filepath.Join(path, mw.PackageName+".control")
-	return ioutil.WriteFile(controlPath, control, 0644)
+	return os.WriteFile(controlPath, control, 0o644)
 }
 
-//WriteMakefile writes .control file for the new postgresql extension
+// WriteMakefile writes .control file for the new postgresql extension
 func (mw *ModuleWriter) WriteMakefile(path string) error {
 	makefile := []byte(`EXTENSION = ` + mw.PackageName + `
 DATA = ` + mw.PackageName + `--0.1.sql  # script files to install
@@ -221,5 +226,5 @@ PG_CONFIG = pg_config
 PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)`)
 	makePath := filepath.Join(path, "Makefile")
-	return ioutil.WriteFile(makePath, makefile, 0644)
+	return os.WriteFile(makePath, makefile, 0o644)
 }

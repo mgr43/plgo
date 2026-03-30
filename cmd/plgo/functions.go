@@ -42,14 +42,14 @@ var datumTypes = map[string]string{
 	"TriggerRow":  "trigger",
 }
 
-//CodeWriter is an interface of an object that can print its code
+// CodeWriter is an interface of an object that can print its code
 type CodeWriter interface {
 	FuncDec() string
 	Code(w io.Writer)
 	SQL(packageName string, w io.Writer)
 }
 
-//NewCode parses the ast.FuncDecl and returns a new Function or An TriggerFunction
+// NewCode parses the ast.FuncDecl and returns a new Function or An TriggerFunction
 func NewCode(function *ast.FuncDecl) (CodeWriter, error) {
 	params, err := getParamList(function)
 	if err != nil {
@@ -77,13 +77,13 @@ func getParamList(function *ast.FuncDecl) (Params []Param, err error) {
 		for _, paramName := range param.Names {
 			switch paramType := param.Type.(type) {
 			case *ast.Ident:
-				//built in type
+				// built in type
 				if _, ok := datumTypes[paramType.Name]; !ok {
 					return nil, fmt.Errorf("Function %s, parameter %s: type %s not supported", function.Name.Name, paramName.Name, paramType.Name)
 				}
 				Params = append(Params, Param{Name: paramName.Name, Type: paramType.Name})
 			case *ast.ArrayType:
-				//built in array type
+				// built in array type
 				arrayType, ok := paramType.Elt.(*ast.Ident)
 				if !ok {
 					return nil, fmt.Errorf("Function %s, parameter %s: array type not supported", function.Name.Name, paramName.Name)
@@ -122,7 +122,7 @@ func getParamList(function *ast.FuncDecl) (Params []Param, err error) {
 }
 
 func getReturnType(functionName string, results *ast.FieldList) (string, bool, error) {
-	//Result is void
+	// Result is void
 	if results == nil {
 		return "", false, nil
 	}
@@ -168,24 +168,24 @@ func getReturnType(functionName string, results *ast.FieldList) (string, bool, e
 	}
 }
 
-//Param the parameters of the functions
+// Param the parameters of the functions
 type Param struct {
 	Name, Type string
 }
 
-//VoidFunction is an function with no return type
+// VoidFunction is an function with no return type
 type VoidFunction struct {
 	Name   string
 	Params []Param
 	Doc    string
 }
 
-//FuncDec returns the PG INFO_V1 macro
+// FuncDec returns the PG INFO_V1 macro
 func (f *VoidFunction) FuncDec() string {
 	return "PG_FUNCTION_INFO_V1(" + f.Name + ");"
 }
 
-//Code writes the wrapper function
+// Code writes the wrapper function
 func (f *VoidFunction) Code(w io.Writer) {
 	w.Write([]byte("//export " + f.Name + "\nfunc " + f.Name + "(fcinfo *funcInfo) Datum {\n"))
 	if len(f.Params) > 0 {
@@ -207,7 +207,7 @@ func (f *VoidFunction) Code(w io.Writer) {
 	w.Write([]byte("}\n"))
 }
 
-//SQL writes the SQL command that creates the function in DB
+// SQL writes the SQL command that creates the function in DB
 func (f *VoidFunction) SQL(packageName string, w io.Writer) {
 	w.Write([]byte("CREATE OR REPLACE FUNCTION " + f.Name + "("))
 	var paramStrings []string
@@ -226,7 +226,7 @@ func (f *VoidFunction) SQL(packageName string, w io.Writer) {
 	f.Comment(w)
 }
 
-//Comment writes the Doc comment of the golang function as an DB comment for that function
+// Comment writes the Doc comment of the golang function as an DB comment for that function
 func (f *VoidFunction) Comment(w io.Writer) {
 	var paramTypes []string
 	for _, p := range f.Params {
@@ -235,14 +235,14 @@ func (f *VoidFunction) Comment(w io.Writer) {
 	w.Write([]byte("COMMENT ON FUNCTION " + f.Name + "(" + strings.Join(paramTypes, ",") + ") IS '" + f.Doc + "';\n\n"))
 }
 
-//Function is a list of parameters and the return type
+// Function is a list of parameters and the return type
 type Function struct {
 	VoidFunction
 	ReturnType string
 	IsStar     bool
 }
 
-//Code writes the wrapper function
+// Code writes the wrapper function
 func (f *Function) Code(w io.Writer) {
 	w.Write([]byte("//export " + f.Name + "\nfunc " + f.Name + "(fcinfo *funcInfo) Datum {\n"))
 	if len(f.Params) > 0 {
@@ -280,10 +280,9 @@ func (f *Function) Code(w io.Writer) {
 		w.Write([]byte("return toDatum(ret)\n"))
 	}
 	w.Write([]byte("}\n"))
-
 }
 
-//SQL writes the SQL command that creates the function in DB
+// SQL writes the SQL command that creates the function in DB
 func (f *Function) SQL(packageName string, w io.Writer) {
 	w.Write([]byte("CREATE OR REPLACE FUNCTION " + f.Name + "("))
 	var paramsString []string
@@ -309,16 +308,16 @@ func (f *Function) SQL(packageName string, w io.Writer) {
 	f.Comment(w)
 }
 
-//TriggerFunction a special type of function, it takes TriggerData as the first argument and TriggerRow as return type
+// TriggerFunction a special type of function, it takes TriggerData as the first argument and TriggerRow as return type
 type TriggerFunction struct {
 	VoidFunction
 }
 
-//Code writes the wrapper function
+// Code writes the wrapper function
 func (f *TriggerFunction) Code(w io.Writer) {
 	w.Write([]byte("//export " + f.Name + "\nfunc " + f.Name + "(fcinfo *funcInfo) Datum {\n"))
 	if len(f.Params) > 0 {
-		//TODO scan from fcinfo may not work, TEST IT!
+		// TODO scan from fcinfo may not work, TEST IT!
 		for _, p := range f.Params {
 			w.Write([]byte("var " + p.Name + " " + p.Type + "\n"))
 		}
@@ -338,7 +337,7 @@ func (f *TriggerFunction) Code(w io.Writer) {
 	w.Write([]byte("}\n"))
 }
 
-//SQL writes the SQL command that creates the function in DB
+// SQL writes the SQL command that creates the function in DB
 func (f *TriggerFunction) SQL(packageName string, w io.Writer) {
 	w.Write([]byte("CREATE OR REPLACE FUNCTION " + f.Name + "("))
 	var paramsString []string

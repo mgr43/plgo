@@ -11,7 +11,7 @@ import (
 	"gitlab.com/microo8/plgo"
 )
 
-//PLGoTest testing function
+// PLGoTest testing function
 func PLGoTest() {
 	t := plgo.NewNoticeLogger("", log.Ltime|log.Lshortfile)
 	defer t.Println("TEST end")
@@ -27,7 +27,7 @@ func PLGoTest() {
 	testQueryOutputArrayInt(plgo.NewNoticeLogger("testQueryOutputArrayInt", log.Ltime|log.Lshortfile))
 	testQueryOutputArrayFloat(plgo.NewNoticeLogger("testQueryOutputArrayFloat", log.Ltime|log.Lshortfile))
 	testJSON(plgo.NewNoticeLogger("testJSON", log.Ltime|log.Lshortfile))
-	//testGoroutines(plgo.NewNoticeLogger("testGoroutines", log.Ltime|log.Lshortfile))
+	// testGoroutines(plgo.NewNoticeLogger("testGoroutines", log.Ltime|log.Lshortfile))
 	testFunctionByteaOutput(plgo.NewNoticeLogger("testFunctionByteaOutput", log.Ltime|log.Lshortfile))
 }
 
@@ -47,7 +47,7 @@ func testConnection(t *log.Logger) {
 }
 
 func testQueryOutputText(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result string
@@ -100,7 +100,7 @@ func testQueryOutputText(t *log.Logger) {
 }
 
 func testQueryOutputInt(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result int
@@ -156,7 +156,7 @@ func testQueryOutputInt(t *log.Logger) {
 
 func testQueryOutputTime(t *log.Logger) {
 	n := time.Now().Round(time.Second)
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result time.Time
@@ -206,7 +206,7 @@ func testQueryOutputTime(t *log.Logger) {
 }
 
 func testQueryOutputBool(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result bool
@@ -258,7 +258,7 @@ func testQueryOutputBool(t *log.Logger) {
 }
 
 func testQueryOutputFloat32(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result float32
@@ -310,7 +310,7 @@ func testQueryOutputFloat32(t *log.Logger) {
 }
 
 func testQueryOutputFloat64(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result float64
@@ -362,7 +362,7 @@ func testQueryOutputFloat64(t *log.Logger) {
 }
 
 func testQueryOutputArrayText(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result []string
@@ -418,7 +418,7 @@ func testQueryOutputArrayText(t *log.Logger) {
 }
 
 func testQueryOutputArrayInt(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result []int
@@ -473,7 +473,7 @@ func testQueryOutputArrayInt(t *log.Logger) {
 }
 
 func testQueryOutputArrayFloat(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result []float64
@@ -529,7 +529,7 @@ func testQueryOutputArrayFloat(t *log.Logger) {
 }
 
 func testGoroutines(t *log.Logger) {
-	var tests = []struct {
+	tests := []struct {
 		query  string
 		args   []interface{}
 		result string

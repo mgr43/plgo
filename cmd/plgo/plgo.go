@@ -64,7 +64,7 @@ func main() {
 	}
 	log.Println(tempPackagePath)
 	if _, err = os.Stat("build"); os.IsNotExist(err) {
-		err = os.Mkdir("build", 0744)
+		err = os.Mkdir("build", 0o744)
 		if err != nil {
 			fmt.Println(err)
 			return

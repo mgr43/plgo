@@ -1,9 +1,9 @@
-// +build !windows
+//go:build !windows
 
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"strings"
 )
 
@@ -15,9 +15,8 @@ func getcorrectpath(p string) string {
 
 // addOtherIncludesAndLDFLAGS used on Windows, see file pathnames_windows.go
 func addOtherIncludesAndLDFLAGS(plgoSource *string, postgresIncludeDir string) {
-	return
 }
 
 func buildPath() (string, error) {
-	return ioutil.TempDir("", plgo)
+	return os.MkdirTemp("", plgo)
 }

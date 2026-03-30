@@ -1,4 +1,4 @@
-// +build windows
+//go:build windows
 
 // also need to include
 // include\server\port\win32

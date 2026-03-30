@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Testcontainers-based integration tests** — Replaced shell-script + Dockerfile test pipeline with proper `go test` using [testcontainers-go](https://golang.testcontainers.org/):
+  - `integration/integration_test.go` — `TestMain` manages PG 18 container lifecycle via testcontainers
+  - `integration/extension_test.go` — 13 test functions covering extension loading, scalar functions, triggers, SPI type conversions, SETOF returns
+  - `integration/Dockerfile.test` — Multi-stage Docker image that builds plgo CLI + extensions from source
+  - Gated behind `//go:build integration` — run with `go test -tags integration ./integration/`
 - **`SETOF` (set-returning functions)** — Functions can now return multiple rows using `plgo.SetOf[T]`:
   - New generic type `plgo.SetOf[T any]` — user returns a slice, plgo generates the SRF protocol
   - `SetOfFunction` code generator — emits `RETURNS SETOF <type>` SQL and SRF wrapper code
@@ -32,6 +37,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Integration tests migrated to testcontainers-go** — `make test-integration` now runs `go test -tags integration ./integration/` instead of building and running a Docker container manually
+- **`Makefile` simplified** — Removed `docker-test` alias, `test-integration` uses `go test`, removed SQL formatting (no more `test/sql/` files)
+- **`Dockerfile` simplified** — Now a build verification image only (runs unit tests, builds CLI + extensions); no longer a test runner
+- **Go minimum version bumped to 1.25** — Required by testcontainers-go dependency
 - **Directory restructure** — CLI tool moved from `plgo/` to `cmd/plgo/` (standard Go project layout)
 - **Replaced deprecated `io/ioutil`** — Migrated to `os.ReadFile`, `os.WriteFile`, `os.MkdirTemp`
 - **Updated build tags** — Changed `// +build` to `//go:build` syntax
@@ -44,6 +53,9 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- `test/run-integration.sh` — Replaced by testcontainers-based Go tests
+- `test/sql/` — SQL test scripts replaced by Go test assertions in `integration/extension_test.go`
+- `test/expected/` — Expected output files replaced by Go test assertions
 - `test/bgw/` — Broken background worker experiment (hardcoded PG paths, never tested in CI)
 - `test/types/` — Broken custom type experiment (raw CGo bypassing plgo, never tested)
 - `test/plgo_test.sql` — Old manual SQL file, superseded by `test/sql/` scripts

@@ -26,7 +26,9 @@ _testmain.go
 
 *.sql
 
-Makefile
+# Ignore generated Makefiles in build directories (not root Makefile)
+build/Makefile
+*/build/Makefile
 *.control
 *.h
 generate_windows/postgresExeExports.def

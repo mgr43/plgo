@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://goreportcard.com/report/gitlab.com/microo8/plgo"><img src="https://goreportcard.com/badge/gitlab.com/microo8/plgo" alt="Go Report Card"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white" alt="Go 1.22+">
+  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go 1.25+">
   <img src="https://img.shields.io/badge/PostgreSQL-14--18-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 14–18">
 </p>
 
@@ -66,7 +66,7 @@ That's it. No CGo, no Makefiles, no SQL boilerplate. Just Go.
 
 ### Prerequisites
 
-- **Go 1.22+**
+- **Go 1.25+**
 - **PostgreSQL dev headers** — `sudo apt-get install postgresql-server-dev-18` (replace `18` with your version)
 - **pg_config** in your PATH
 
@@ -426,27 +426,35 @@ make test-unit
 make test-integration
 ```
 
-Builds the extension inside a Docker container with PostgreSQL 18, installs it, and runs SQL tests with expected output verification.
+Uses [testcontainers-go](https://golang.testcontainers.org/) to automatically spin up a PostgreSQL 18 container, build and install both the `example` and `test` extensions from source, and run SQL assertions via `database/sql`. No manual Docker commands needed — just Docker running in the background.
+
+The integration tests are gated behind a build tag, so `go test ./...` only runs fast unit tests. To run everything:
+
+```bash
+go test -tags integration -v -timeout 5m ./integration/
+```
 
 ### Project structure
 
 ```
 plgo/
-├── pl.go                   # Runtime: CGo bridge (Datum↔Go, SPI, triggers, elog)
-├── cmd/plgo/               # CLI code generator
-│   ├── plgo.go             #   Entry point
-│   ├── modulewriter.go     #   Orchestrates code generation
-│   ├── functions.go        #   CodeWriter types, datumTypes map, SQL/code generation
-│   ├── visitors.go         #   AST visitors (FuncVisitor, Remover)
-│   └── plgo_test.go        #   160 unit tests
-├── example/                # Example extension
+├── pl.go                       # Runtime: CGo bridge (Datum↔Go, SPI, triggers, elog)
+├── cmd/plgo/                   # CLI code generator
+│   ├── plgo.go                 #   Entry point
+│   ├── modulewriter.go         #   Orchestrates code generation
+│   ├── functions.go            #   CodeWriter types, datumTypes map, SQL/code generation
+│   ├── visitors.go             #   AST visitors (FuncVisitor, Remover)
+│   └── plgo_test.go            #   160 unit tests
+├── integration/                # Integration tests (testcontainers-go)
+│   ├── integration_test.go     #   Container setup, TestMain
+│   ├── extension_test.go       #   SQL assertion tests (13 test functions)
+│   └── Dockerfile.test         #   Multi-stage: builds extensions into PG 18 image
+├── example/                    # Example extension
 │   └── example_methods.go
-├── test/                   # Integration test suite
-│   ├── plgotest.go         #   SPI test functions (run inside PostgreSQL)
-│   ├── sql/                #   SQL test scripts
-│   └── expected/           #   Expected output (diff-based verification)
-├── Dockerfile              # Multi-stage build: Go 1.26 + PG 18
-├── Makefile                # build, install, test-unit, test-integration, fmt, clean
+├── test/                       # Test extension source (compiled as PG extension)
+│   └── plgotest.go             #   SPI test functions (run inside PostgreSQL)
+├── Dockerfile                  # Build verification: Go 1.26 + PG 18
+├── Makefile                    # build, install, test-unit, test-integration, fmt, clean
 └── go.mod
 ```
 
@@ -458,8 +466,8 @@ plgo/
 | `make install` | Install `plgo` into `$GOPATH/bin` |
 | `make test` | Run unit + integration tests |
 | `make test-unit` | Run Go unit tests (fast, no DB) |
-| `make test-integration` | Build Docker image, run SQL tests against PG 18 |
-| `make fmt` | Format Go (gofumpt) and SQL (pg_format) files |
+| `make test-integration` | Run integration tests via testcontainers (requires Docker) |
+| `make fmt` | Format Go files with gofumpt |
 | `make clean` | Remove build artifacts and Docker images |
 
 ---
@@ -483,11 +491,14 @@ Contributions of all kinds are welcome! Whether it's bug fixes, new type mapping
 git clone https://gitlab.com/microo8/plgo.git
 cd plgo
 
-# Run unit tests
+# Run unit tests (fast, no database)
 make test-unit
 
-# Run full integration tests (requires Docker)
+# Run integration tests (requires Docker)
 make test-integration
+
+# Run all tests
+make test
 
 # Format code
 make fmt

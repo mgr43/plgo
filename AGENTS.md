@@ -24,18 +24,19 @@ The CLI (`cmd/plgo/plgo.go` → `main()`) runs this pipeline:
 
 | File | Role |
 |---|---|
-| `pl.go` | Runtime: CGo bridge with all Datum↔Go conversions, SPI wrappers, trigger support. **Template** — gets `//{funcdec}` replaced during generation |
+| `pl.go` | Runtime: CGo bridge with all Datum↔Go conversions, SPI wrappers, trigger support. **Template** — gets `//{exportedfuncs}` and `//{pgmodulemagic}` replaced during generation |
 | `cmd/plgo/plgo.go` | CLI entry point — orchestrates parse → generate → build → emit |
 | `cmd/plgo/modulewriter.go` | Orchestrates code generation; writes SQL/control/Makefile |
 | `cmd/plgo/functions.go` | `CodeWriter` types — generate wrapper Go code and SQL `CREATE FUNCTION` statements. Contains `datumTypes` map (Go→PG type mapping) |
 | `cmd/plgo/visitors.go` | AST visitors: `FuncVisitor` (collects exported funcs), `Remover` (strips `plgo` imports/selectors) |
 | `cmd/plgo/pathnames.go` / `pathnames_windows.go` | Platform-specific path handling and `pg_config` integration |
 | `cmd/plgo/plgo_test.go` | Comprehensive unit tests (160 test cases) — AST parsing, code generation, SQL output, type coverage, SETOF |
+| `integration/integration_test.go` | Testcontainers-based integration test setup: builds Docker image, starts PG 18 container, provides shared `*sql.DB` |
+| `integration/extension_test.go` | Integration test functions: 13 tests covering extension loading, function calls, triggers, SPI, SETOF |
+| `integration/Dockerfile.test` | Multi-stage Docker image: builds plgo CLI + extensions from source, installs into PG 18 |
 | `example/example_methods.go` | Reference for valid user code patterns (void, scalar, array, bytea, trigger, nullable returns, SETOF) |
 | `test/plgotest.go` | Integration test functions that run inside PostgreSQL (SPI, type conversions) |
-| `test/sql/` | SQL test scripts executed during integration tests |
-| `test/expected/` | Expected output for integration tests (diff-based verification) |
-| `Dockerfile` | Multi-stage build: Go 1.26 builder + PG 18 runner for integration tests |
+| `Dockerfile` | Build verification image: Go 1.26 builder, runs unit tests, builds extensions |
 | `Makefile` | Root Makefile with build, install, test-unit, test-integration, fmt, clean targets |
 | `CHANGELOG.md` | Documents all changes from the modernization effort |
 
@@ -55,10 +56,11 @@ plgo [path/to/package]    # generates build/ directory
 # Run unit tests (no database needed) — 160 test cases
 make test-unit
 
-# Run full integration tests (requires Docker)
+# Run integration tests (requires Docker — uses testcontainers-go)
 make test-integration
+# or directly: go test -tags integration -v -timeout 5m ./integration/
 
-# Format Go and SQL files
+# Format Go files
 make fmt
 
 # Clean build artifacts
@@ -67,13 +69,23 @@ make clean
 
 **Prerequisite:** `postgresql-server-dev-X.Y` package and `pg_config` in PATH (for local builds), or Docker (for integration tests).
 
+## Integration Test Architecture
+
+Integration tests live in `integration/` and use [testcontainers-go](https://golang.testcontainers.org/) to automate the full pipeline:
+
+1. `integration/Dockerfile.test` — Multi-stage Docker build: compiles plgo CLI from source, builds both `example` and `test` extensions, installs them into a `postgres:18` runtime image.
+2. `integration/integration_test.go` — `TestMain` uses testcontainers to build the Docker image and start the container. A shared `*sql.DB` connection is provided to all test functions.
+3. `integration/extension_test.go` — 13 test functions that run SQL assertions via `database/sql` (extension loading, function results, trigger behavior, SETOF row counts).
+
+Tests are gated behind `//go:build integration` so `go test ./...` skips them. Run with `go test -tags integration ./integration/`.
+
 ## Conventions & Patterns
 
 - User code **must be `package main`** — the parser explicitly checks for this (`modulewriter.go:55`)
 - Only **exported functions** become stored procedures; they are renamed to `__FuncName` in generated code
-- The `pl.go` root file uses **placeholder comments** (`//{funcdec}`, `//{windowsCFLAGS}`) for code injection during generation — do not remove these
+- The `pl.go` root file uses **placeholder comments** (`//{exportedfuncs}`, `//{pgmodulemagic}`, `//{windowsCFLAGS}`) for code injection during generation — do not remove these
 - Error handling in generated extensions uses `plgo.NewErrorLogger` / `plgo.NewNoticeLogger` which write to PostgreSQL's `elog()` — not stdout/stderr
 - DB access within procedures uses `plgo.Open()` / `db.Prepare()` / `stmt.Query()` — a thin wrapper over PostgreSQL SPI, not `database/sql`
 - **Goroutines are dangerous** in this context due to PostgreSQL stack depth limits; avoid them in procedures that touch the DB
 - Windows support uses build tags (`//go:build windows` / `//go:build !windows`) for platform-specific path handling
-- **Integration tests** run inside Docker: the `Dockerfile` builds both the example and test extensions, installs them into PG 18, and runs SQL scripts with expected output comparison
+- **Integration tests** use testcontainers-go (`integration/` directory): a `Dockerfile.test` builds extensions into a PG 18 image, `TestMain` manages the container lifecycle, and test functions run SQL assertions via `database/sql`. Gated behind `//go:build integration`.

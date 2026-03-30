@@ -1,5 +1,0 @@
--- 01_extensions.sql: Load extensions
-CREATE EXTENSION example;
-CREATE EXTENSION
-CREATE EXTENSION test;
-CREATE EXTENSION

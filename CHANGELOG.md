@@ -2,10 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.2.0] — 2026-03-30
 
 ### Added
 
+- **Self-contained installer script** (`--installer` flag) — `plgo --installer .` produces a single `.sh` file that bundles the compiled `.so`, SQL definitions, and `.control` file as base64 payload. The script auto-detects `pg_config`, installs extension files, and optionally runs `CREATE EXTENSION` via `psql`. Supports `--create-extension`, `--uninstall`, `--dry-run`, `--db`, `--pg-config` flags.
+  - `cmd/plgo/installer.go` — Shell template (`text/template`), `WriteInstaller()` method, base64 encoding
+  - `cmd/plgo/installer_test.go` — Unit tests: base64 round-trip, template syntax validation, full `WriteInstaller` round-trip
+  - `integration/installer_test.go` — Integration tests: 9 subtests verifying install, `--create-extension`, and `--uninstall` in a clean PG container
+  - `integration/Dockerfile.installer` — Clean PG 18 image with installer scripts for testing
 - **Testcontainers-based integration tests** — Replaced shell-script + Dockerfile test pipeline with proper `go test` using [testcontainers-go](https://golang.testcontainers.org/):
   - `integration/integration_test.go` — `TestMain` manages PG 18 container lifecycle via testcontainers
   - `integration/extension_test.go` — 13 test functions covering extension loading, scalar functions, triggers, SPI type conversions, SETOF returns
@@ -33,10 +38,12 @@ All notable changes to this project will be documented in this file.
 - **`make fmt` target** — Runs `gofumpt` on Go files and `pg_format` on SQL files
 - **SQL test harness** — `test/sql/` scripts with `test/expected/` output files, diff-based verification
 - **Trigger integration test** — `CreatedTimeTrigger` is now actually tested end-to-end (CREATE TABLE → CREATE TRIGGER → INSERT → verify)
-- **New example functions** — `AddDays` (time.Time), `ScaleArray` ([]int64), `MaybeUpper` (*string nullable return)
+- **New example functions** — `AddDays` (time.Time), `ScaleArray` ([]int64), `MaybeUpper` (\*string nullable return)
 
 ### Changed
 
+- **CLI migrated to [kong](https://github.com/alecthomas/kong)** — Replaced `flag` with kong struct-based CLI parsing. Auto-generated `--help`, path validation via `type:"existingdir"`, `--version` flag injectable via `-ldflags`
+- **Integration tests run in parallel** — Extension tests and installer suite now use `t.Parallel()`, both Docker images build concurrently. Extensions pre-created in `TestMain` to avoid race conditions
 - **Integration tests migrated to testcontainers-go** — `make test-integration` now runs `go test -tags integration ./integration/` instead of building and running a Docker container manually
 - **`Makefile` simplified** — Removed `docker-test` alias, `test-integration` uses `go test`, removed SQL formatting (no more `test/sql/` files)
 - **`Dockerfile` simplified** — Now a build verification image only (runs unit tests, builds CLI + extensions); no longer a test runner
@@ -61,4 +68,3 @@ All notable changes to this project will be documented in this file.
 - `test/plgo_test.sql` — Old manual SQL file, superseded by `test/sql/` scripts
 - `generate_windows/` — Unmaintained PowerShell MSVC-era script
 - `test/runtest.sh` — Replaced by `Makefile` targets and Docker-based test runner
-

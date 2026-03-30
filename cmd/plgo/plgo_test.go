@@ -1197,4 +1197,3 @@ func Foo() plgo.SetOf[string] { return nil }
 		return true
 	})
 }
-

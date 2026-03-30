@@ -29,6 +29,8 @@ docker-build:
 # Format Go files
 fmt:
 	go run mvdan.cc/gofumpt@latest -w .
+	@-find . -regex '.*\.\(js\|jsx\|ts\|tsx\|json\|yaml\|yml\|md\|markdown\|html\|css\|scss\|less\|vue\|svelte\|graphql\|gql\|mdx\)$$' -print0 | xargs -0 npx prettier --write 2>/dev/null || true
+
 
 # Remove build artifacts
 clean:

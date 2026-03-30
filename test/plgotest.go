@@ -747,4 +747,3 @@ func GenerateInts(n int32) plgo.SetOf[int32] {
 func GenerateWords() plgo.SetOf[string] {
 	return plgo.SetOf[string]{"hello", "world", "from", "plgo"}
 }
-

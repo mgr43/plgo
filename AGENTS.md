@@ -4,7 +4,7 @@
 
 plgo is a **code generator and runtime library** for writing PostgreSQL extensions (stored procedures/triggers) in Go. It has two main components:
 
-1. **CLI tool** (`cmd/plgo/` directory) — Parses a user's Go package, generates CGo wrapper code, builds a `.so` shared object, and emits PostgreSQL extension files (SQL, Makefile, `.control`).
+1. **CLI tool** (`cmd/plgo/` directory) — Parses a user's Go package, generates CGo wrapper code, builds a `.so` shared object, and emits PostgreSQL extension files (SQL, Makefile, `.control`). With `--installer`, also produces a self-contained `.sh` script for zero-dependency deployment.
 2. **Runtime library** (`pl.go` at root) — A single-file CGo bridge between Go and PostgreSQL's C API (SPI, Datum conversion, elog, triggers). This file is **copied into the generated build**, not linked as a normal Go dependency.
 
 ## Architecture & Code Generation Pipeline
@@ -19,26 +19,31 @@ The CLI (`cmd/plgo/plgo.go` → `main()`) runs this pipeline:
    - `methods.go` — CGo `//export` wrappers that call `__FuncName` with Datum↔Go conversion
 4. **Build** with `go build -buildmode=c-shared` → produces `.so`/`.dll`
 5. **Emit** extension files into `build/`: SQL (`CREATE FUNCTION`), `.control`, `Makefile`
+6. **Optionally** (`--installer` flag): bundle `.so` + `.sql` + `.control` into a self-contained `.sh` installer script via `WriteInstaller()` — the `.so` is base64-encoded, and the shell header auto-detects `pg_config` on the target
 
 ## Key Files
 
-| File | Role |
-|---|---|
-| `pl.go` | Runtime: CGo bridge with all Datum↔Go conversions, SPI wrappers, trigger support. **Template** — gets `//{exportedfuncs}` and `//{pgmodulemagic}` replaced during generation |
-| `cmd/plgo/plgo.go` | CLI entry point — orchestrates parse → generate → build → emit |
-| `cmd/plgo/modulewriter.go` | Orchestrates code generation; writes SQL/control/Makefile |
-| `cmd/plgo/functions.go` | `CodeWriter` types — generate wrapper Go code and SQL `CREATE FUNCTION` statements. Contains `datumTypes` map (Go→PG type mapping) |
-| `cmd/plgo/visitors.go` | AST visitors: `FuncVisitor` (collects exported funcs), `Remover` (strips `plgo` imports/selectors) |
-| `cmd/plgo/pathnames.go` / `pathnames_windows.go` | Platform-specific path handling and `pg_config` integration |
-| `cmd/plgo/plgo_test.go` | Comprehensive unit tests (160 test cases) — AST parsing, code generation, SQL output, type coverage, SETOF |
-| `integration/integration_test.go` | Testcontainers-based integration test setup: builds Docker image, starts PG 18 container, provides shared `*sql.DB` |
-| `integration/extension_test.go` | Integration test functions: 13 tests covering extension loading, function calls, triggers, SPI, SETOF |
-| `integration/Dockerfile.test` | Multi-stage Docker image: builds plgo CLI + extensions from source, installs into PG 18 |
-| `example/example_methods.go` | Reference for valid user code patterns (void, scalar, array, bytea, trigger, nullable returns, SETOF) |
-| `test/plgotest.go` | Integration test functions that run inside PostgreSQL (SPI, type conversions) |
-| `Dockerfile` | Build verification image: Go 1.26 builder, runs unit tests, builds extensions |
-| `Makefile` | Root Makefile with build, install, test-unit, test-integration, fmt, clean targets |
-| `CHANGELOG.md` | Documents all changes from the modernization effort |
+| File                                             | Role                                                                                                                                                                          |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pl.go`                                          | Runtime: CGo bridge with all Datum↔Go conversions, SPI wrappers, trigger support. **Template** — gets `//{exportedfuncs}` and `//{pgmodulemagic}` replaced during generation |
+| `cmd/plgo/plgo.go`                               | CLI entry point — orchestrates parse → generate → build → emit                                                                                                                |
+| `cmd/plgo/modulewriter.go`                       | Orchestrates code generation; writes SQL/control/Makefile                                                                                                                     |
+| `cmd/plgo/functions.go`                          | `CodeWriter` types — generate wrapper Go code and SQL `CREATE FUNCTION` statements. Contains `datumTypes` map (Go→PG type mapping)                                            |
+| `cmd/plgo/visitors.go`                           | AST visitors: `FuncVisitor` (collects exported funcs), `Remover` (strips `plgo` imports/selectors)                                                                            |
+| `cmd/plgo/pathnames.go` / `pathnames_windows.go` | Platform-specific path handling and `pg_config` integration                                                                                                                   |
+| `cmd/plgo/plgo_test.go`                          | Comprehensive unit tests (160 test cases) — AST parsing, code generation, SQL output, type coverage, SETOF                                                                    |
+| `cmd/plgo/installer.go`                          | Self-contained `.sh` installer generator: shell template, `WriteInstaller()`, base64 payload encoding                                                                         |
+| `cmd/plgo/installer_test.go`                     | Installer unit tests: base64 round-trip, template syntax validation (`sh -n`), full `WriteInstaller` round-trip                                                               |
+| `integration/integration_test.go`                | Testcontainers-based integration test setup: builds Docker image, starts PG 18 container, provides shared `*sql.DB`                                                           |
+| `integration/extension_test.go`                  | Integration test functions: 13 tests covering extension loading, function calls, triggers, SPI, SETOF                                                                         |
+| `integration/installer_test.go`                  | Installer integration tests: 9 subtests verifying install, `--create-extension`, and `--uninstall` in a clean PG container                                                    |
+| `integration/Dockerfile`                         | Multi-stage Docker image: builds plgo CLI + extensions from source, installs into PG 18                                                                                       |
+| `integration/Dockerfile.installer`               | Clean PG 18 image with only installer `.sh` scripts (no pre-installed extensions) for installer tests                                                                         |
+| `example/example_methods.go`                     | Reference for valid user code patterns (void, scalar, array, bytea, trigger, nullable returns, SETOF)                                                                         |
+| `test/plgotest.go`                               | Integration test functions that run inside PostgreSQL (SPI, type conversions)                                                                                                 |
+| `Dockerfile`                                     | Build verification image: Go 1.26 builder, runs unit tests, builds extensions                                                                                                 |
+| `Makefile`                                       | Root Makefile with build, install, test-unit, test-integration, fmt, clean targets                                                                                            |
+| `CHANGELOG.md`                                   | Documents all changes from the modernization effort                                                                                                                           |
 
 ## Supported Go↔PostgreSQL Type Mappings
 
@@ -52,6 +57,9 @@ make install    # or: cd cmd/plgo && go install .
 
 # Build an extension from a Go package
 plgo [path/to/package]    # generates build/ directory
+
+# Build with self-contained installer script
+plgo --installer [path/to/package]    # also produces install-<ext>.sh
 
 # Run unit tests (no database needed) — 160 test cases
 make test-unit

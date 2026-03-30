@@ -30,6 +30,14 @@ $ plgo .
 $ cd build && sudo make install
 ```
 
+Or, generate a self-contained installer script:
+
+```
+$ plgo --installer .
+$ scp install-mypackage.sh prod-server:
+$ ssh prod-server 'sudo ./install-mypackage.sh --create-extension'
+```
+
 ```sql
 CREATE EXTENSION mypackage;
 SELECT hello('world');
@@ -48,15 +56,15 @@ That's it. No CGo, no Makefiles, no SQL boilerplate. Just Go.
 
 ## ✨ Why plgo?
 
-| | PL/pgSQL | PL/Python | C extension | **plgo** |
-|---|---|---|---|---|
-| Language | SQL dialect | Python | C | **Go** |
-| Type safety | ❌ Runtime | ❌ Runtime | ✅ Compile-time | **✅ Compile-time** |
-| Performance | Interpreted | Interpreted | Native | **Native (compiled to .so)** |
-| Access to Go ecosystem | ❌ | ❌ | ❌ | **✅ Full `go get` ecosystem** |
-| Boilerplate | Low | Low | 🔴 Enormous | **✅ Zero** |
-| Database access (SPI) | Built-in | Via adapter | Raw C API | **✅ Clean Go API** |
-| Trigger support | ✅ | ✅ | ✅ | **✅** |
+|                        | PL/pgSQL    | PL/Python   | C extension     | **plgo**                       |
+| ---------------------- | ----------- | ----------- | --------------- | ------------------------------ |
+| Language               | SQL dialect | Python      | C               | **Go**                         |
+| Type safety            | ❌ Runtime  | ❌ Runtime  | ✅ Compile-time | **✅ Compile-time**            |
+| Performance            | Interpreted | Interpreted | Native          | **Native (compiled to .so)**   |
+| Access to Go ecosystem | ❌          | ❌          | ❌              | **✅ Full `go get` ecosystem** |
+| Boilerplate            | Low         | Low         | 🔴 Enormous     | **✅ Zero**                    |
+| Database access (SPI)  | Built-in    | Via adapter | Raw C API       | **✅ Clean Go API**            |
+| Trigger support        | ✅          | ✅          | ✅              | **✅**                         |
 
 **plgo gives you native C-extension performance with Go's safety and ecosystem.** Use any Go library — JSON processing, compression, HTTP clients, crypto — directly inside PostgreSQL.
 
@@ -143,6 +151,42 @@ cd build
 sudo make install                   # installs into PostgreSQL
 ```
 
+### Self-contained installer (alternative)
+
+Instead of copying a `build/` directory, you can produce a single `.sh` script that bundles everything — the compiled `.so`, SQL definitions, and control file:
+
+```bash
+plgo --installer .                  # produces install-myext.sh
+```
+
+Copy it to a production server and run:
+
+```bash
+scp install-myext.sh prod-server:
+ssh prod-server
+chmod +x install-myext.sh
+sudo ./install-myext.sh                         # installs extension files
+sudo ./install-myext.sh --create-extension       # also runs CREATE EXTENSION via psql
+```
+
+No Go, no make, no build tools needed on the target — just a running PostgreSQL. The script auto-detects `pg_config` and installs the `.so`, `.sql`, and `.control` files to the right directories.
+
+<details>
+<summary>Installer script options</summary>
+
+| Flag | Description |
+|------|-------------|
+| `--create-extension` | After installing files, run `CREATE EXTENSION` via `psql` |
+| `--db DATABASE` | Database for `CREATE EXTENSION` (default: `postgres`) |
+| `--pg-config PATH` | Path to `pg_config` (default: auto-detect) |
+| `--uninstall` | Remove extension files (with `--create-extension`: also `DROP EXTENSION`) |
+| `--dry-run` | Show what would be done without changing anything |
+| `--help` | Show usage |
+
+Environment variables: `PG_CONFIG`, `PGDATABASE`, `PGUSER`.
+
+</details>
+
 ### Use it!
 
 ```sql
@@ -165,30 +209,30 @@ Every exported Go function automatically becomes a PostgreSQL stored procedure. 
 
 ### Scalar Types
 
-| Go type | PostgreSQL type |
-|---|---|
-| `string` | `text` |
-| `[]byte` | `bytea` |
-| `bool` | `boolean` |
-| `int16` | `smallint` |
-| `int32` | `integer` |
-| `int64` / `int` | `bigint` |
-| `float32` | `real` |
-| `float64` | `double precision` |
-| `time.Time` | `timestamp with timezone` |
+| Go type         | PostgreSQL type           |
+| --------------- | ------------------------- |
+| `string`        | `text`                    |
+| `[]byte`        | `bytea`                   |
+| `bool`          | `boolean`                 |
+| `int16`         | `smallint`                |
+| `int32`         | `integer`                 |
+| `int64` / `int` | `bigint`                  |
+| `float32`       | `real`                    |
+| `float64`       | `double precision`        |
+| `time.Time`     | `timestamp with timezone` |
 
 ### Array Types
 
-| Go type | PostgreSQL type |
-|---|---|
-| `[]string` | `text[]` |
-| `[]bool` | `boolean[]` |
-| `[]int16` | `smallint[]` |
-| `[]int32` | `integer[]` |
-| `[]int64` / `[]int` | `bigint[]` |
-| `[]float32` | `real[]` |
-| `[]float64` | `double precision[]` |
-| `[]time.Time` | `timestamp with timezone[]` |
+| Go type             | PostgreSQL type             |
+| ------------------- | --------------------------- |
+| `[]string`          | `text[]`                    |
+| `[]bool`            | `boolean[]`                 |
+| `[]int16`           | `smallint[]`                |
+| `[]int32`           | `integer[]`                 |
+| `[]int64` / `[]int` | `bigint[]`                  |
+| `[]float32`         | `real[]`                    |
+| `[]float64`         | `double precision[]`        |
+| `[]time.Time`       | `timestamp with timezone[]` |
 
 ### Nullable Returns
 
@@ -286,18 +330,18 @@ func CountUsers() int64 {
 
 ### API Reference
 
-| Method | Description |
-|---|---|
-| `plgo.Open()` | Opens an SPI connection (one per function call) |
-| `db.Close()` | Closes the SPI connection (always `defer` this) |
+| Method                     | Description                                                                                           |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `plgo.Open()`              | Opens an SPI connection (one per function call)                                                       |
+| `db.Close()`               | Closes the SPI connection (always `defer` this)                                                       |
 | `db.Prepare(query, types)` | Prepares a parameterized query. `types` is `[]string` of PG type names for parameters (`nil` if none) |
-| `stmt.Query(args...)` | Executes query, returns `*Rows` for iterating |
-| `stmt.QueryRow(args...)` | Executes query, returns single `*Row` |
-| `stmt.Exec(args...)` | Executes a non-SELECT statement (INSERT, UPDATE, etc.) |
-| `rows.Next()` | Advances to next row, returns `false` when done |
-| `rows.Scan(&val1, &val2)` | Reads column values into Go variables |
-| `rows.Columns()` | Returns column names as `[]string` |
-| `row.Scan(&val1, &val2)` | Reads column values from a single row |
+| `stmt.Query(args...)`      | Executes query, returns `*Rows` for iterating                                                         |
+| `stmt.QueryRow(args...)`   | Executes query, returns single `*Row`                                                                 |
+| `stmt.Exec(args...)`       | Executes a non-SELECT statement (INSERT, UPDATE, etc.)                                                |
+| `rows.Next()`              | Advances to next row, returns `false` when done                                                       |
+| `rows.Scan(&val1, &val2)`  | Reads column values into Go variables                                                                 |
+| `rows.Columns()`           | Returns column names as `[]string`                                                                    |
+| `row.Scan(&val1, &val2)`   | Reads column values from a single row                                                                 |
 
 ### Parameterized Queries
 
@@ -336,6 +380,7 @@ func CreatedTimeTrigger(td *plgo.TriggerData) *plgo.TriggerRow {
 ```
 
 **Rules for trigger functions:**
+
 - First parameter must be `*plgo.TriggerData`
 - Must return `*plgo.TriggerRow`
 - plgo generates `RETURNS TRIGGER` SQL automatically
@@ -344,17 +389,17 @@ func CreatedTimeTrigger(td *plgo.TriggerData) *plgo.TriggerRow {
 
 `TriggerData` provides methods to check what fired the trigger:
 
-| Method | Description |
-|---|---|
-| `td.FiredBefore()` | Trigger fired BEFORE the operation |
-| `td.FiredAfter()` | Trigger fired AFTER the operation |
-| `td.FiredInstead()` | Trigger fired INSTEAD OF the operation |
-| `td.FiredForRow()` | Row-level trigger |
-| `td.FiredForStatement()` | Statement-level trigger |
-| `td.FiredByInsert()` | Triggered by INSERT |
-| `td.FiredByUpdate()` | Triggered by UPDATE |
-| `td.FiredByDelete()` | Triggered by DELETE |
-| `td.FiredByTruncate()` | Triggered by TRUNCATE |
+| Method                   | Description                            |
+| ------------------------ | -------------------------------------- |
+| `td.FiredBefore()`       | Trigger fired BEFORE the operation     |
+| `td.FiredAfter()`        | Trigger fired AFTER the operation      |
+| `td.FiredInstead()`      | Trigger fired INSTEAD OF the operation |
+| `td.FiredForRow()`       | Row-level trigger                      |
+| `td.FiredForStatement()` | Statement-level trigger                |
+| `td.FiredByInsert()`     | Triggered by INSERT                    |
+| `td.FiredByUpdate()`     | Triggered by UPDATE                    |
+| `td.FiredByDelete()`     | Triggered by DELETE                    |
+| `td.FiredByTruncate()`   | Triggered by TRUNCATE                  |
 
 ### Attaching the trigger
 
@@ -406,6 +451,9 @@ your_code.go                      build/
 ├── func Count() int64      ──→    ├── myext--0.1.sql    ← CREATE FUNCTION statements
 └── func OnInsert(td)              ├── myext.control     ← extension metadata
                                    └── Makefile          ← PGXS install script
+
+                              --installer flag also produces:
+                                   install-myext.sh      ← self-contained installer
 ```
 
 ---
@@ -440,15 +488,19 @@ go test -tags integration -v -timeout 5m ./integration/
 plgo/
 ├── pl.go                       # Runtime: CGo bridge (Datum↔Go, SPI, triggers, elog)
 ├── cmd/plgo/                   # CLI code generator
-│   ├── plgo.go                 #   Entry point
+│   ├── plgo.go                 #   Entry point (kong CLI)
 │   ├── modulewriter.go         #   Orchestrates code generation
 │   ├── functions.go            #   CodeWriter types, datumTypes map, SQL/code generation
+│   ├── installer.go            #   Self-contained .sh installer generator
 │   ├── visitors.go             #   AST visitors (FuncVisitor, Remover)
-│   └── plgo_test.go            #   160 unit tests
+│   ├── plgo_test.go            #   160 unit tests
+│   └── installer_test.go       #   Installer unit tests
 ├── integration/                # Integration tests (testcontainers-go)
 │   ├── integration_test.go     #   Container setup, TestMain
 │   ├── extension_test.go       #   SQL assertion tests (13 test functions)
-│   └── Dockerfile.test         #   Multi-stage: builds extensions into PG 18 image
+│   ├── installer_test.go       #   Installer integration tests (9 subtests)
+│   ├── Dockerfile              #   Multi-stage: builds extensions into PG 18 image
+│   └── Dockerfile.installer    #   Clean PG 18 image with installer scripts only
 ├── example/                    # Example extension
 │   └── example_methods.go
 ├── test/                       # Test extension source (compiled as PG extension)
@@ -460,15 +512,15 @@ plgo/
 
 ### Makefile targets
 
-| Target | Description |
-|---|---|
-| `make build` | Build the `plgo` CLI tool |
-| `make install` | Install `plgo` into `$GOPATH/bin` |
-| `make test` | Run unit + integration tests |
-| `make test-unit` | Run Go unit tests (fast, no DB) |
+| Target                  | Description                                                |
+| ----------------------- | ---------------------------------------------------------- |
+| `make build`            | Build the `plgo` CLI tool                                  |
+| `make install`          | Install `plgo` into `$GOPATH/bin`                          |
+| `make test`             | Run unit + integration tests                               |
+| `make test-unit`        | Run Go unit tests (fast, no DB)                            |
 | `make test-integration` | Run integration tests via testcontainers (requires Docker) |
-| `make fmt` | Format Go files with gofumpt |
-| `make clean` | Remove build artifacts and Docker images |
+| `make fmt`              | Format Go files with gofumpt                               |
+| `make clean`            | Remove build artifacts and Docker images                   |
 
 ---
 

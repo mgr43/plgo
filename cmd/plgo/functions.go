@@ -456,4 +456,3 @@ func (f *SetOfFunction) SQL(packageName string, w io.Writer) {
 	}
 	f.Comment(w)
 }
-

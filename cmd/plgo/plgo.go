@@ -1,27 +1,77 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+
+	"github.com/alecthomas/kong"
 )
 
-func printUsage() {
-	fmt.Println(`Usage: plgo [-v] [path/to/package]`)
-	flag.PrintDefaults()
+// CLI defines the command-line interface for plgo.
+type CLI struct {
+	Path      string           `arg:"" optional:"" default:"." help:"Path to the Go package to build." type:"existingdir"`
+	Verbose   bool             `short:"v" help:"Verbose output (go build -x)."`
+	Installer bool             `help:"Also produce a self-contained .sh installer script."`
+	Output    string           `short:"o" help:"Output filename for the installer script." placeholder:"FILE"`
+	Version   kong.VersionFlag `short:"V" help:"Print version and exit."`
 }
 
-func buildPackage(buildPath, packageName string) error {
+// Run executes the build.
+func (cmd *CLI) Run() error {
+	moduleWriter, err := NewModuleWriter(cmd.Path)
+	if err != nil {
+		return fmt.Errorf("parse package: %w", err)
+	}
+
+	tempPackagePath, err := moduleWriter.WriteModule()
+	if err != nil {
+		return err
+	}
+	log.Println(tempPackagePath)
+
+	if _, err = os.Stat("build"); os.IsNotExist(err) {
+		if err = os.Mkdir("build", 0o744); err != nil {
+			return fmt.Errorf("create build dir: %w", err)
+		}
+	}
+
+	if err = buildPackage(tempPackagePath, moduleWriter.PackageName, cmd.Verbose); err != nil {
+		return err
+	}
+	if err = moduleWriter.WriteSQL("build"); err != nil {
+		return err
+	}
+	if err = moduleWriter.WriteControl("build"); err != nil {
+		return err
+	}
+	if err = moduleWriter.WriteMakefile("build"); err != nil {
+		return err
+	}
+
+	if cmd.Installer {
+		outPath := cmd.Output
+		if outPath == "" {
+			outPath = "install-" + moduleWriter.PackageName + ".sh"
+		}
+		if err = moduleWriter.WriteInstaller("build", outPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func buildPackage(buildPath, packageName string, verbose bool) error {
 	if err := os.Setenv("CGO_LDFLAGS_ALLOW", "-shared|-undefined|dynamic_lookup"); err != nil {
 		return err
 	}
-	switchx := "-v" // substitutor
+	buildFlag := "-v"
 	if verbose {
-		switchx = "-x"
+		buildFlag = "-x"
 	}
 	fileExt := ".so"
 	if runtime.GOOS == "windows" {
@@ -29,9 +79,9 @@ func buildPackage(buildPath, packageName string) error {
 	}
 	absOut, err := filepath.Abs(filepath.Join("build", packageName+fileExt))
 	if err != nil {
-		return fmt.Errorf("Cannot resolve output path: %s", err)
+		return fmt.Errorf("resolve output path: %w", err)
 	}
-	goBuild := exec.Command("go", "build", switchx,
+	goBuild := exec.Command("go", "build", buildFlag,
 		"-buildmode=c-shared",
 		"-o", absOut,
 	)
@@ -39,57 +89,24 @@ func buildPackage(buildPath, packageName string) error {
 	goBuild.Stdout = os.Stdout
 	goBuild.Stderr = os.Stderr
 	if err := goBuild.Run(); err != nil {
-		return fmt.Errorf("Cannot build package: %s", err)
+		return fmt.Errorf("go build failed: %w", err)
 	}
 	return nil
 }
 
-var verbose bool
+// version is set at build time via -ldflags.
+var version = "0.2.0"
 
 func main() {
-	flag.BoolVar(&verbose, "v", false, "be verbose, 'go build -x'")
-	flag.Parse()
-	packagePath := "."
-	if len(flag.Args()) == 1 {
-		packagePath = flag.Arg(0)
-	}
-	moduleWriter, err := NewModuleWriter(packagePath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		printUsage()
-		os.Exit(1)
-	}
-	tempPackagePath, err := moduleWriter.WriteModule()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	log.Println(tempPackagePath)
-	if _, err = os.Stat("build"); os.IsNotExist(err) {
-		err = os.Mkdir("build", 0o744)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	}
-	err = buildPackage(tempPackagePath, moduleWriter.PackageName)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	err = moduleWriter.WriteSQL("build")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	err = moduleWriter.WriteControl("build")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	err = moduleWriter.WriteMakefile("build")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	var cmd CLI
+	ctx := kong.Parse(&cmd,
+		kong.Name("plgo"),
+		kong.Description("Build PostgreSQL extensions from Go packages.\n\nTurns exported Go functions into native PostgreSQL stored procedures,\ntriggers, and set-returning functions — no C required."),
+		kong.UsageOnError(),
+		kong.Vars{"version": version},
+	)
+	if err := ctx.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }

@@ -98,7 +98,7 @@ func setupContainer(ctx context.Context) (testcontainers.Container, *sql.DB, err
 	return container, db, nil
 }
 
-// TestMain starts the PostgreSQL container once, runs all tests, then cleans up.
+// TestMain starts the PostgreSQL container once, creates extensions, runs all tests, then cleans up.
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
@@ -106,6 +106,15 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "setup failed: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Pre-create extensions so parallel tests don't race on CREATE EXTENSION.
+	for _, ext := range []string{"example", "test"} {
+		if _, err := db.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS "+ext); err != nil {
+			fmt.Fprintf(os.Stderr, "CREATE EXTENSION %s: %v\n", ext, err)
+			_ = container.Terminate(ctx)
+			os.Exit(1)
+		}
 	}
 
 	testDB = db
@@ -117,4 +126,3 @@ func TestMain(m *testing.M) {
 
 	os.Exit(code)
 }
-

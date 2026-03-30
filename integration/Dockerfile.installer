@@ -1,0 +1,37 @@
+FROM golang:1.26-bookworm AS builder
+
+# Add PostgreSQL apt repo for PG 18
+RUN apt-get update && apt-get install -y curl ca-certificates gnupg lsb-release && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    apt-get update && \
+    apt-get install -y postgresql-server-dev-18 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+# Build the plgo CLI
+RUN cd cmd/plgo && go build -o /usr/local/bin/plgo .
+
+# Build the example extension with --installer flag
+RUN cd example && /usr/local/bin/plgo --installer .
+
+# Build the test extension with --installer flag
+RUN cd test && /usr/local/bin/plgo --installer .
+
+# --- Runtime stage: clean PG 18 with only the installer scripts ---
+FROM postgres:18
+
+RUN apt-get update && apt-get install -y postgresql-server-dev-18 && rm -rf /var/lib/apt/lists/*
+
+# Copy only the installer scripts — NOT the built extensions
+COPY --from=builder /src/example/install-example.sh /installers/install-example.sh
+COPY --from=builder /src/test/install-test.sh /installers/install-test.sh
+
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV POSTGRES_DB=plgo_test
+

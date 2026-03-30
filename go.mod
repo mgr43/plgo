@@ -3,6 +3,7 @@ module gitlab.com/microo8/plgo
 go 1.25.0
 
 require (
+	github.com/alecthomas/kong v1.14.0
 	github.com/lib/pq v1.12.0
 	github.com/testcontainers/testcontainers-go v0.41.0
 	golang.org/x/sys v0.42.0

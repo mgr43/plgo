@@ -4,7 +4,7 @@
 
 ---
 
-So you want to run Go code *inside* PostgreSQL. Like, literally inside the
+So you want to run Go code _inside_ PostgreSQL. Like, literally inside the
 database server process. Not "call an HTTP endpoint from a trigger." Not "use
 some ORM." We're talking `SELECT my_go_function('hello')` and having Go execute
 at C-extension speed, right there in the query pipeline.
@@ -49,12 +49,12 @@ Let's build something real.
 
 ### What you need
 
-| Thing | Why |
-|---|---|
-| **Go 1.22+** | We build with `cgo` and `-buildmode=c-shared` |
+| Thing                      | Why                                                  |
+| -------------------------- | ---------------------------------------------------- |
+| **Go 1.22+**               | We build with `cgo` and `-buildmode=c-shared`        |
 | **PostgreSQL dev headers** | The C headers plgo's generated code compiles against |
-| **`pg_config` in PATH** | plgo asks it where PostgreSQL lives |
-| **Docker** *(optional)* | For running tests without polluting your system |
+| **`pg_config` in PATH**    | plgo asks it where PostgreSQL lives                  |
+| **Docker** _(optional)_    | For running tests without polluting your system      |
 
 Install the prerequisites:
 
@@ -267,15 +267,15 @@ func PetAutoNamer(td *plgo.TriggerData) *plgo.TriggerRow {
 
 Let's count what we have:
 
-| Function | Type | PG Signature |
-|---|---|---|
-| `PetGreet` | scalar → scalar | `petgreet(text) → text` |
-| `PetFeed` | multi-param → scalar | `petfeed(text, integer) → text` |
-| `PetRename` | SPI + exec | `petrename(text, text) → text` |
-| `PetStats` | SPI + query | `petstats() → text` |
-| `PetScoreMultiply` | arrays | `petscoremultiply(bigint[], bigint) → bigint[]` |
-| `PetMood` | nullable return | `petmood(text) → text` (can return NULL) |
-| `PetAutoNamer` | trigger | `petautonamer() → trigger` |
+| Function           | Type                 | PG Signature                                    |
+| ------------------ | -------------------- | ----------------------------------------------- |
+| `PetGreet`         | scalar → scalar      | `petgreet(text) → text`                         |
+| `PetFeed`          | multi-param → scalar | `petfeed(text, integer) → text`                 |
+| `PetRename`        | SPI + exec           | `petrename(text, text) → text`                  |
+| `PetStats`         | SPI + query          | `petstats() → text`                             |
+| `PetScoreMultiply` | arrays               | `petscoremultiply(bigint[], bigint) → bigint[]` |
+| `PetMood`          | nullable return      | `petmood(text) → text` (can return NULL)        |
+| `PetAutoNamer`     | trigger              | `petautonamer() → trigger`                      |
 
 Seven functions. Zero lines of C. Let's build it.
 
@@ -349,7 +349,6 @@ sudo make install
 
 This copies `pgpet.so` to PostgreSQL's `$libdir` and the SQL/control files
 where PostgreSQL expects them.
-
 
 ### Load the extension
 
@@ -743,6 +742,7 @@ func PetFeed(fcinfo *funcInfo) Datum {
 ```
 
 What's happening:
+
 1. PostgreSQL calls `PetFeed` with raw C `Datum` arguments
 2. `fcinfo.Scan()` converts them to Go types (`string`, `int32`)
 3. Your original function (renamed to `__PetFeed`) runs with real Go types
@@ -803,38 +803,38 @@ PostgreSQL types. Here's the complete list:
 
 ### Scalar types
 
-| Go type | PostgreSQL type | Example |
-|---|---|---|
-| `string` | `text` | `func Fn(s string) string` |
-| `[]byte` | `bytea` | `func Fn(data []byte) []byte` |
-| `bool` | `boolean` | `func Fn(flag bool) bool` |
-| `int16` | `smallint` | `func Fn(n int16) int16` |
-| `int32` | `integer` | `func Fn(n int32) int32` |
-| `int64` | `bigint` | `func Fn(n int64) int64` |
-| `int` | `bigint` | `func Fn(n int) int` |
-| `float32` | `real` | `func Fn(f float32) float32` |
-| `float64` | `double precision` | `func Fn(f float64) float64` |
+| Go type   | PostgreSQL type    | Example                       |
+| --------- | ------------------ | ----------------------------- |
+| `string`  | `text`             | `func Fn(s string) string`    |
+| `[]byte`  | `bytea`            | `func Fn(data []byte) []byte` |
+| `bool`    | `boolean`          | `func Fn(flag bool) bool`     |
+| `int16`   | `smallint`         | `func Fn(n int16) int16`      |
+| `int32`   | `integer`          | `func Fn(n int32) int32`      |
+| `int64`   | `bigint`           | `func Fn(n int64) int64`      |
+| `int`     | `bigint`           | `func Fn(n int) int`          |
+| `float32` | `real`             | `func Fn(f float32) float32`  |
+| `float64` | `double precision` | `func Fn(f float64) float64`  |
 
 ### Array types
 
-| Go type | PostgreSQL type | Example |
-|---|---|---|
-| `[]string` | `text[]` | `func Fn(arr []string) []string` |
-| `[]int32` | `integer[]` | `func Fn(arr []int32) []int32` |
-| `[]int64` | `bigint[]` | `func Fn(arr []int64) []int64` |
+| Go type     | PostgreSQL type      | Example                            |
+| ----------- | -------------------- | ---------------------------------- |
+| `[]string`  | `text[]`             | `func Fn(arr []string) []string`   |
+| `[]int32`   | `integer[]`          | `func Fn(arr []int32) []int32`     |
+| `[]int64`   | `bigint[]`           | `func Fn(arr []int64) []int64`     |
 | `[]float64` | `double precision[]` | `func Fn(arr []float64) []float64` |
-| `[]bool` | `boolean[]` | `func Fn(arr []bool) []bool` |
+| `[]bool`    | `boolean[]`          | `func Fn(arr []bool) []bool`       |
 
 ### Special types
 
-| Go type | PostgreSQL type | Notes |
-|---|---|---|
-| *(no return)* | `VOID` | Function returns nothing |
-| `*string` | `text` (nullable) | Return `nil` → SQL `NULL` |
-| `*int64` | `bigint` (nullable) | Any pointer type → nullable |
-| `plgo.SetOf[T]` | `SETOF <type>` | Returns multiple rows, one `T` per row |
-| `*plgo.TriggerData` | *(first param)* | Trigger functions only |
-| `*plgo.TriggerRow` | `trigger` | Trigger return type |
+| Go type             | PostgreSQL type     | Notes                                  |
+| ------------------- | ------------------- | -------------------------------------- |
+| _(no return)_       | `VOID`              | Function returns nothing               |
+| `*string`           | `text` (nullable)   | Return `nil` → SQL `NULL`              |
+| `*int64`            | `bigint` (nullable) | Any pointer type → nullable            |
+| `plgo.SetOf[T]`     | `SETOF <type>`      | Returns multiple rows, one `T` per row |
+| `*plgo.TriggerData` | _(first param)_     | Trigger functions only                 |
+| `*plgo.TriggerRow`  | `trigger`           | Trigger return type                    |
 
 ### Using SPI with JSON
 
@@ -920,7 +920,7 @@ row, _ := stmt.QueryRow(42)
 
 ### ⚠️ Goroutines
 
-Goroutines *technically* work, but PostgreSQL has a stack depth limit that
+Goroutines _technically_ work, but PostgreSQL has a stack depth limit that
 conflicts with Go's goroutine stack allocation. The safe rule:
 
 - ✅ Use goroutines for **pure computation** (no DB access)
@@ -946,7 +946,7 @@ func ParallelHash(inputs []string) []string {
 
 ### ⚠️ Using Go libraries
 
-You can use *any* Go package. plgo builds your code with `go build`, so
+You can use _any_ Go package. plgo builds your code with `go build`, so
 everything in your `go.mod` is available:
 
 ```go
@@ -1061,10 +1061,10 @@ distinct type tells plgo to generate `RETURNS SETOF integer` instead of
 
 The difference matters:
 
-| Return type | SQL | Result |
-|---|---|---|
-| `[]int32` | `RETURNS integer[]` | **One row** containing an array: `{1,2,3,4,5}` |
-| `plgo.SetOf[int32]` | `RETURNS SETOF integer` | **Five rows**, each with one integer |
+| Return type         | SQL                     | Result                                         |
+| ------------------- | ----------------------- | ---------------------------------------------- |
+| `[]int32`           | `RETURNS integer[]`     | **One row** containing an array: `{1,2,3,4,5}` |
+| `plgo.SetOf[int32]` | `RETURNS SETOF integer` | **Five rows**, each with one integer           |
 
 ### Using it in SQL
 
@@ -1152,12 +1152,57 @@ You just return a slice. plgo does the rest. 🎉
 ### Build on a matching system
 
 The `.so` must be compiled on a system with the same:
+
 - OS and architecture as the target server
 - PostgreSQL major version (the C ABI can change between majors)
 
 The safest approach: build in Docker using the same base image as your server.
 
-### Install on the server
+### Option A: Self-contained installer script (recommended)
+
+The easiest way to deploy. Build with `--installer`:
+
+```bash
+plgo --installer .
+```
+
+This produces `install-pgpet.sh` — a single file that bundles the compiled
+`.so`, SQL definitions, and control file. Copy it to the server and run:
+
+```bash
+scp install-pgpet.sh prod-server:
+ssh prod-server
+
+# Install files + create the extension in one shot:
+sudo ./install-pgpet.sh --create-extension --db myapp
+
+# Or install files only (CREATE EXTENSION yourself later):
+sudo ./install-pgpet.sh
+```
+
+No Go, no make, no build tools needed on the server. The script auto-detects
+`pg_config` and installs everything to the right directories.
+
+**Useful flags:**
+
+| Flag | What it does |
+|------|-------------|
+| `--create-extension` | Also runs `CREATE EXTENSION` via `psql` |
+| `--db myapp` | Which database to create the extension in |
+| `--pg-config /path/...` | Override `pg_config` location |
+| `--dry-run` | Show what would happen without doing it |
+| `--uninstall` | Remove the extension (with `--create-extension`: also `DROP EXTENSION`) |
+
+**Upgrade workflow:**
+
+1. Rebuild: `plgo --installer .`
+2. Copy new `install-pgpet.sh` to server
+3. `sudo ./install-pgpet.sh --create-extension --db myapp`
+4. If the extension was already loaded: `DROP EXTENSION pgpet; CREATE EXTENSION pgpet;`
+
+### Option B: Copy build/ directory
+
+The traditional approach — copy the `build/` directory and use `make install`:
 
 ```bash
 # Copy the build/ directory to the server
@@ -1222,7 +1267,12 @@ drop-and-recreate approach works fine.)
                     │  └── Makefile             │
                     └───────────┬──────────────┘
                                 │
+                    --installer flag also produces:
+                    install-myext.sh  (self-contained)
+                                │
                     sudo make install
+                      ── or ──
+                    sudo ./install-myext.sh
                                 │
                     ┌───────────▼──────────────┐
                     │  PostgreSQL               │
@@ -1239,6 +1289,5 @@ Now go build something awesome. Your database is waiting. 🐘
 
 ---
 
-*This tutorial is part of [plgo](https://gitlab.com/microo8/plgo) — Write
-PostgreSQL extensions in Go.*
-
+_This tutorial is part of [plgo](https://gitlab.com/microo8/plgo) — Write
+PostgreSQL extensions in Go._

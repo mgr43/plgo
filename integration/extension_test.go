@@ -13,6 +13,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestCreateExtensionExample(t *testing.T) {
+	t.Parallel()
 	_, err := testDB.Exec("CREATE EXTENSION IF NOT EXISTS example")
 	if err != nil {
 		t.Fatalf("CREATE EXTENSION example: %v", err)
@@ -20,6 +21,7 @@ func TestCreateExtensionExample(t *testing.T) {
 }
 
 func TestCreateExtensionTest(t *testing.T) {
+	t.Parallel()
 	_, err := testDB.Exec("CREATE EXTENSION IF NOT EXISTS test")
 	if err != nil {
 		t.Fatalf("CREATE EXTENSION test: %v", err)
@@ -31,6 +33,7 @@ func TestCreateExtensionTest(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestConcatArray(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS example")
 
 	tests := []struct {
@@ -56,6 +59,7 @@ func TestConcatArray(t *testing.T) {
 }
 
 func TestGzipCompress(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS example")
 
 	var works bool
@@ -69,6 +73,7 @@ func TestGzipCompress(t *testing.T) {
 }
 
 func TestTrigger(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS example")
 	mustExec(t, "DROP TABLE IF EXISTS test_trigger")
 	mustExec(t, "CREATE TABLE test_trigger (id integer, value text)")
@@ -99,6 +104,7 @@ func TestTrigger(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestPLGoTest(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS test")
 
 	// plgotest() exercises all SPI type conversions internally.
@@ -112,6 +118,7 @@ func TestPLGoTest(t *testing.T) {
 }
 
 func TestReverseBytea(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS test")
 
 	var got []byte
@@ -126,6 +133,7 @@ func TestReverseBytea(t *testing.T) {
 }
 
 func TestStringArrayReturn(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS test")
 
 	var got string
@@ -144,6 +152,7 @@ func TestStringArrayReturn(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenerateInts(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS test")
 
 	rows, err := testDB.Query("SELECT * FROM generateints(5)")
@@ -171,6 +180,7 @@ func TestGenerateInts(t *testing.T) {
 }
 
 func TestGenerateIntsEmpty(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS test")
 
 	rows, err := testDB.Query("SELECT * FROM generateints(0)")
@@ -192,6 +202,7 @@ func TestGenerateIntsEmpty(t *testing.T) {
 }
 
 func TestGenerateWords(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS test")
 
 	rows, err := testDB.Query("SELECT * FROM generatewords()")
@@ -223,6 +234,7 @@ func TestGenerateWords(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenerateSeries(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS example")
 
 	rows, err := testDB.Query("SELECT * FROM generateseries(3, 7)")
@@ -250,6 +262,7 @@ func TestGenerateSeries(t *testing.T) {
 }
 
 func TestRepeatString(t *testing.T) {
+	t.Parallel()
 	mustExec(t, "CREATE EXTENSION IF NOT EXISTS example")
 
 	rows, err := testDB.Query("SELECT * FROM repeatstring('go', 3)")
@@ -311,4 +324,3 @@ func stringSliceEqual(a, b []string) bool {
 	}
 	return true
 }
-

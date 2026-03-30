@@ -1206,4 +1206,3 @@ func scanVal(oid C.Oid, typeName string, val C.Datum, arg interface{}) error {
 }
 
 //{exportedfuncs}
-

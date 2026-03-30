@@ -16,7 +16,6 @@ All notable changes to this project will be documented in this file.
   - Trigger function classification and code generation
   - Visitor correctness (`Remover` strips `plgo` imports/selectors)
   - `datumTypes` map completeness
-- **CI configuration** — `.gitlab-ci.yml` with unit test and integration test stages
 - **`make fmt` target** — Runs `gofumpt` on Go files and `pg_format` on SQL files
 - **SQL test harness** — `test/sql/` scripts with `test/expected/` output files, diff-based verification
 - **Trigger integration test** — `CreatedTimeTrigger` is now actually tested end-to-end (CREATE TABLE → CREATE TRIGGER → INSERT → verify)

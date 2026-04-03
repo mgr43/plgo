@@ -97,7 +97,6 @@ that lives in your database. Because why not.
 ```bash
 mkdir pgpet && cd pgpet
 go mod init pgpet
-go get github.com/mgr43/plgo
 ```
 
 > 💡 **The directory name becomes the extension name.** So `pgpet/` →

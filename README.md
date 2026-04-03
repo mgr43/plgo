@@ -91,7 +91,6 @@ Create a directory for your extension (the directory name becomes the extension 
 ```bash
 mkdir myext && cd myext
 go mod init myext
-go get github.com/mgr43/plgo
 ```
 
 Create `main.go`:

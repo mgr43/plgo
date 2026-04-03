@@ -115,7 +115,7 @@ func (mw *ModuleWriter) writeBuildGoMod(tempPackagePath string) error {
 			continue
 		}
 		// Skip plgo dependency lines
-		if strings.Contains(trimmed, "gitlab.com/microo8/plgo") {
+		if strings.Contains(trimmed, "github.com/mgr43/plgo") {
 			continue
 		}
 		out = append(out, line)
@@ -149,10 +149,10 @@ func (mw *ModuleWriter) writeUserPackage(tempPackagePath string) error {
 
 func readPlGoSource() ([]byte, error) {
 	// Use 'go list' to find the module's source directory in the module cache
-	cmd := exec.Command("go", "list", "-m", "-json", "gitlab.com/microo8/plgo")
+	cmd := exec.Command("go", "list", "-m", "-json", "github.com/mgr43/plgo")
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("Cannot locate plgo module: %w\nPlease install it with: go install gitlab.com/microo8/plgo/plgo@latest", err)
+		return nil, fmt.Errorf("Cannot locate plgo module: %w\nPlease install it with: go install github.com/mgr43/plgo/plgo@latest", err)
 	}
 	var modInfo struct {
 		Dir string `json:"Dir"`
@@ -161,7 +161,7 @@ func readPlGoSource() ([]byte, error) {
 		return nil, fmt.Errorf("Cannot parse module info: %w", err)
 	}
 	if modInfo.Dir == "" {
-		return nil, fmt.Errorf("Module gitlab.com/microo8/plgo not found\nPlease install it with: go install gitlab.com/microo8/plgo/plgo@latest")
+		return nil, fmt.Errorf("Module github.com/mgr43/plgo not found\nPlease install it with: go install github.com/mgr43/plgo/plgo@latest")
 	}
 	plgoPath := filepath.Join(modInfo.Dir, "pl.go")
 	rv, err := os.ReadFile(plgoPath)

@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"gitlab.com/microo8/plgo"
+	"github.com/mgr43/plgo"
 )
 
 // Meh prints out a message to PostgreSQL's error log.

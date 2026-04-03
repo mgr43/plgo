@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <a href="https://goreportcard.com/report/gitlab.com/microo8/plgo"><img src="https://goreportcard.com/badge/gitlab.com/microo8/plgo" alt="Go Report Card"></a>
+  <a href="https://goreportcard.com/report/github.com/mgr43/plgo"><img src="https://goreportcard.com/badge/github.com/mgr43/plgo" alt="Go Report Card"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go 1.25+">
   <img src="https://img.shields.io/badge/PostgreSQL-14--18-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 14–18">
@@ -17,7 +17,7 @@
 ```go
 package main
 
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 
 // This becomes SELECT hello('world') → 'Hello, world!'
 func Hello(name string) string {
@@ -81,7 +81,7 @@ That's it. No CGo, no Makefiles, no SQL boilerplate. Just Go.
 ### Install
 
 ```bash
-go install gitlab.com/microo8/plgo/cmd/plgo@latest
+go install github.com/mgr43/plgo/cmd/plgo@latest
 ```
 
 ### Write your functions
@@ -91,7 +91,7 @@ Create a directory for your extension (the directory name becomes the extension 
 ```bash
 mkdir myext && cd myext
 go mod init myext
-go get gitlab.com/microo8/plgo
+go get github.com/mgr43/plgo
 ```
 
 Create `main.go`:
@@ -103,7 +103,7 @@ import (
     "log"
     "strings"
 
-    "gitlab.com/microo8/plgo"
+    "github.com/mgr43/plgo"
 )
 
 // Reverse returns the input string reversed.
@@ -540,7 +540,7 @@ Contributions of all kinds are welcome! Whether it's bug fixes, new type mapping
 
 ```bash
 # Clone and set up
-git clone https://gitlab.com/microo8/plgo.git
+git clone https://github.com/mgr43/plgo.git
 cd plgo
 
 # Run unit tests (fast, no database)

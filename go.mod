@@ -1,4 +1,4 @@
-module gitlab.com/microo8/plgo
+module github.com/mgr43/plgo
 
 go 1.25.0
 

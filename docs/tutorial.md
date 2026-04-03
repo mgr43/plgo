@@ -73,7 +73,7 @@ pg_config --version
 ### Install plgo
 
 ```bash
-go install gitlab.com/microo8/plgo/cmd/plgo@latest
+go install github.com/mgr43/plgo/cmd/plgo@latest
 ```
 
 That's it. You now have a `plgo` binary in your `$GOPATH/bin`.
@@ -97,7 +97,7 @@ that lives in your database. Because why not.
 ```bash
 mkdir pgpet && cd pgpet
 go mod init pgpet
-go get gitlab.com/microo8/plgo
+go get github.com/mgr43/plgo
 ```
 
 > 💡 **The directory name becomes the extension name.** So `pgpet/` →
@@ -141,7 +141,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"gitlab.com/microo8/plgo"
+	"github.com/mgr43/plgo"
 )
 
 // PetGreet returns a greeting from your virtual pet.
@@ -554,7 +554,7 @@ RUN apt-get update && apt-get install -y curl ca-certificates gnupg lsb-release 
 WORKDIR /src
 
 # Install plgo
-RUN go install gitlab.com/microo8/plgo/cmd/plgo@latest
+RUN go install github.com/mgr43/plgo/cmd/plgo@latest
 
 # Copy your extension source
 COPY go.mod go.sum ./
@@ -977,7 +977,7 @@ import (
 	"io"
 	"log"
 
-	"gitlab.com/microo8/plgo"
+	"github.com/mgr43/plgo"
 )
 
 // GzipCompress compresses bytea data using gzip.
@@ -1043,7 +1043,7 @@ That's what `SETOF` is for. And plgo makes it dead simple with `plgo.SetOf[T]`.
 ```go
 package main
 
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 
 // GenerateSeries returns integers from start to stop, one per row.
 func GenerateSeries(start, stop int32) plgo.SetOf[int32] {
@@ -1289,5 +1289,5 @@ Now go build something awesome. Your database is waiting. 🐘
 
 ---
 
-_This tutorial is part of [plgo](https://gitlab.com/microo8/plgo) — Write
+_This tutorial is part of [plgo](https://github.com/mgr43/plgo) — Write
 PostgreSQL extensions in Go._

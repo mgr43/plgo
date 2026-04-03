@@ -140,7 +140,7 @@ func MaybeInt() *int64 { return nil }`)
 
 func TestNewCode_TriggerFunction(t *testing.T) {
 	fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 func MyTrigger(td *plgo.TriggerData) *plgo.TriggerRow { return td.NewRow }`)
 	code, err := NewCode(fd)
 	if err != nil {
@@ -367,7 +367,7 @@ func TestRemover_StripsPlgoImport(t *testing.T) {
 	fset := token.NewFileSet()
 	src := `package main
 
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 
 func Foo() { plgo.Open() }
 `
@@ -378,7 +378,7 @@ func Foo() { plgo.Open() }
 	ast.Walk(new(Remover), file)
 
 	for _, imp := range file.Imports {
-		if imp.Path.Value == "\"gitlab.com/microo8/plgo\"" {
+		if imp.Path.Value == "\"github.com/mgr43/plgo\"" {
 			t.Error("Remover did not clear plgo import path")
 		}
 	}
@@ -867,7 +867,7 @@ func TestTriggerFunction_FuncDec(t *testing.T) {
 
 func TestNewCode_TriggerDataNotFirst(t *testing.T) {
 	fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 func Bad(name string, td *plgo.TriggerData) *plgo.TriggerRow { return nil }`)
 	_, err := NewCode(fd)
 	if err == nil {
@@ -882,7 +882,7 @@ func TestRemover_StripsSelectorExpr(t *testing.T) {
 	fset := token.NewFileSet()
 	src := `package main
 
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 
 func Foo() {
 	db, _ := plgo.Open()
@@ -912,7 +912,7 @@ func TestRemover_StripsStarExpr(t *testing.T) {
 	fset := token.NewFileSet()
 	src := `package main
 
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 
 func Foo(td *plgo.TriggerData) {}
 `
@@ -939,7 +939,7 @@ func Foo(td *plgo.TriggerData) {}
 
 func TestNewCode_SetOfFunction(t *testing.T) {
 	fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 func GenStrings() plgo.SetOf[string] { return nil }`)
 	code, err := NewCode(fd)
 	if err != nil {
@@ -962,7 +962,7 @@ func GenStrings() plgo.SetOf[string] { return nil }`)
 
 func TestNewCode_SetOfWithParams(t *testing.T) {
 	fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 func GenN(n int32) plgo.SetOf[int64] { return nil }`)
 	code, err := NewCode(fd)
 	if err != nil {
@@ -988,7 +988,7 @@ func TestNewCode_SetOfAllScalarTypes(t *testing.T) {
 	for _, goType := range types {
 		t.Run(goType, func(t *testing.T) {
 			fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 func Fn() plgo.SetOf[`+goType+`] { return nil }`)
 			code, err := NewCode(fd)
 			if err != nil {
@@ -1007,7 +1007,7 @@ func Fn() plgo.SetOf[`+goType+`] { return nil }`)
 
 func TestNewCode_SetOfBytea(t *testing.T) {
 	fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 func Fn() plgo.SetOf[[]byte] { return nil }`)
 	code, err := NewCode(fd)
 	if err != nil {
@@ -1024,7 +1024,7 @@ func Fn() plgo.SetOf[[]byte] { return nil }`)
 
 func TestNewCode_SetOfUnsupportedType(t *testing.T) {
 	fd := parseFuncDecl(t, `package main
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 type Custom struct{}
 func Fn() plgo.SetOf[Custom] { return nil }`)
 	_, err := NewCode(fd)
@@ -1175,7 +1175,7 @@ func TestRemover_StripsSetOfExpr(t *testing.T) {
 	fset := token.NewFileSet()
 	src := `package main
 
-import "gitlab.com/microo8/plgo"
+import "github.com/mgr43/plgo"
 
 func Foo() plgo.SetOf[string] { return nil }
 `

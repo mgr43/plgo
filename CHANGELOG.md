@@ -52,7 +52,7 @@ All notable changes to this project will be documented in this file.
 - **Replaced deprecated `io/ioutil`** — Migrated to `os.ReadFile`, `os.WriteFile`, `os.MkdirTemp`
 - **Updated build tags** — Changed `// +build` to `//go:build` syntax
 - **`readPlGoSource()` reworked** — Now uses `go list -m -json` to locate `pl.go` in the module cache (works with Go modules, not just `GOPATH`)
-- **Install instructions** — Changed from `go get -u` to `go install gitlab.com/microo8/plgo/cmd/plgo@latest`
+- **Install instructions** — Changed from `go get -u` to `go install github.com/mgr43/plgo/cmd/plgo@latest`
 - **`Makefile`** — New root Makefile with `build`, `install`, `test`, `test-unit`, `test-integration`, `fmt`, `clean` targets
 - **`Dockerfile`** — Updated to Go 1.26 + PostgreSQL 18
 - **Documentation** — Complete README rewrite with quick start, type tables, SPI API reference, trigger guide, architecture overview

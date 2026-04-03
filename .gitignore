@@ -27,7 +27,7 @@ _testmain.go
 *.sql
 
 # Ignore generated Makefiles in build directories (not root Makefile)
-build/Makefile
+build
 */build/Makefile
 *.control
 *.h

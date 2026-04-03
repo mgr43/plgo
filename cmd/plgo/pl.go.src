@@ -350,6 +350,14 @@ static Datum* srf_palloc_datums(int n) {
 	return (Datum*) palloc(sizeof(Datum) * n);
 }
 
+static void compat_parseTypeString(const char *str, Oid *typeid, int32 *typmod) {
+    #if PG_VERSION_NUM >= 160000
+        parseTypeString(str, typeid, typmod, NULL);
+    #else
+        parseTypeString(str, typeid, typmod, false);
+    #endif
+}
+
 //{funcdec}
 */
 import "C"
@@ -785,7 +793,7 @@ func (db *DB) Prepare(query string, types []string) (*Stmt, error) {
 		for i, t := range types {
 			ct := C.CString(t)
 			defer C.free(unsafe.Pointer(ct))
-			C.parseTypeString(ct, &typeIds[i], &typmod, nil)
+			C.compat_parseTypeString(ct, &typeIds[i], &typmod)
 		}
 		typeIdsP = &typeIds[0]
 	}

@@ -486,7 +486,6 @@ go test -tags integration -v -timeout 5m ./integration/
 
 ```
 plgo/
-├── pl.go                       # Runtime: CGo bridge (Datum↔Go, SPI, triggers, elog)
 ├── cmd/plgo/                   # CLI code generator
 │   ├── plgo.go                 #   Entry point (kong CLI)
 │   ├── modulewriter.go         #   Orchestrates code generation
@@ -494,6 +493,7 @@ plgo/
 │   ├── installer.go            #   Self-contained .sh installer generator
 │   ├── visitors.go             #   AST visitors (FuncVisitor, Remover)
 │   ├── plgo_test.go            #   160 unit tests
+│   ├── pl.go                   # Runtime: CGo bridge (Datum↔Go, SPI, triggers, elog)
 │   └── installer_test.go       #   Installer unit tests
 ├── integration/                # Integration tests (testcontainers-go)
 │   ├── integration_test.go     #   Container setup, TestMain

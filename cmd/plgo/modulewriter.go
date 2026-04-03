@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
+	_ "embed"
 	"fmt"
 	"go/ast"
 	"go/format"
@@ -147,36 +147,10 @@ func (mw *ModuleWriter) writeUserPackage(tempPackagePath string) error {
 	return nil
 }
 
-func readPlGoSource() ([]byte, error) {
-	// Use 'go list' to find the module's source directory in the module cache
-	cmd := exec.Command("go", "list", "-m", "-json", "github.com/mgr43/plgo")
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("Cannot locate plgo module: %w\nPlease install it with: go install github.com/mgr43/plgo/plgo@latest", err)
-	}
-	var modInfo struct {
-		Dir string `json:"Dir"`
-	}
-	if err := json.Unmarshal(out, &modInfo); err != nil {
-		return nil, fmt.Errorf("Cannot parse module info: %w", err)
-	}
-	if modInfo.Dir == "" {
-		return nil, fmt.Errorf("Module github.com/mgr43/plgo not found\nPlease install it with: go install github.com/mgr43/plgo/plgo@latest")
-	}
-	plgoPath := filepath.Join(modInfo.Dir, "pl.go")
-	rv, err := os.ReadFile(plgoPath)
-	if err != nil {
-		return nil, fmt.Errorf("Cannot read plgo source at %s: %w", plgoPath, err)
-	}
-	return rv, nil
-}
+//go:embed pl.go.src
+var plgoSource string
 
 func (mw *ModuleWriter) writeplgo(tempPackagePath string) error {
-	plgoSourceBin, err := readPlGoSource()
-	if err != nil {
-		return err
-	}
-	plgoSource := string(plgoSourceBin)
 	// Replace "package plgo" with "package main", handling any leading godoc comments
 	plgoSource = strings.Replace(plgoSource, "package plgo", "package main", 1)
 	postgresIncludeDir, err := exec.Command("pg_config", "--includedir-server").CombinedOutput()

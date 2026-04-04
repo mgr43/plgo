@@ -5,7 +5,7 @@
 
 <p align="center">
   <a href="https://goreportcard.com/report/github.com/mgr43/plgo"><img src="https://goreportcard.com/badge/github.com/mgr43/plgo" alt="Go Report Card"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/github/license/mgr43/plgo" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go 1.25+">
   <img src="https://img.shields.io/badge/PostgreSQL-14--18-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 14–18">
 </p>
